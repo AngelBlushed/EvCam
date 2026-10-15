@@ -6,6 +6,8 @@ EvCam crée une **caméra virtuelle « EvCam »** que Zoom, Teams, Discord, OBS,
 
 **[⬇ Installer .exe (Windows)](https://github.com/AngelBlushed/EvCam/releases/latest/download/EvCam-Setup.exe)** · **[⬇ Installer .apk (Android)](https://github.com/AngelBlushed/EvCam/releases/latest/download/EvCam.apk)** · [Toutes les versions](https://github.com/AngelBlushed/EvCam/releases)
 
+🌐 **Site : [evcam-core.netlify.app](https://evcam-core.netlify.app)**
+
 ## Installation sur le PC
 
 1. Téléchargez et lancez `EvCam-Setup.exe` (page [Releases](https://github.com/AngelBlushed/EvCam/releases/latest) ; installateur Windows, aucun droit administrateur requis par défaut).
@@ -110,7 +112,7 @@ Journal de diagnostic : `%APPDATA%\EvCam\evcam.log`.
 
 ## Site web
 
-Le dossier [`website/`](website) contient le site de présentation d’EvCam (page statique, aucune dépendance, ≈ 0,7 Mo) : il suffit de **glisser le dossier `website` dans Netlify** (Netlify Drop) pour le mettre en ligne. Les boutons « Installer .exe » et « Installer .apk » pointent vers les fichiers `EvCam-Setup.exe` et `EvCam.apk` de la dernière version publiée sur GitHub : gardez ces deux noms de fichier à chaque nouvelle version.
+Le dossier [`website/`](website) contient le site de présentation d’EvCam (page statique, aucune dépendance, ≈ 0,7 Mo) : il suffit de **glisser le dossier `website` dans Netlify** (Netlify Drop) pour le mettre en ligne (en ligne : [evcam-core.netlify.app](https://evcam-core.netlify.app)). L’aperçu qui s’affiche quand on partage le lien (Discord, SMS, WhatsApp…) vient des balises `og:` de `index.html` et de l’image `assets/og-image.jpg` (1200×630) ; Discord garde un aperçu en cache quelques heures. Les boutons « Installer .exe » et « Installer .apk » pointent vers les fichiers `EvCam-Setup.exe` et `EvCam.apk` de la dernière version publiée sur GitHub : gardez ces deux noms de fichier à chaque nouvelle version.
 
 ## Compiler depuis les sources
 
