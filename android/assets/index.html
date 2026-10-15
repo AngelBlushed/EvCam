@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#07080f">
+  <title>EvCam</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <main id="app" data-view="connecting">
+
+    <!-- Accueil -->
+    <section class="view" data-v="home">
+      <div class="inner">
+        <div class="brand">
+          <img class="logo" src="logo.svg" alt="" width="104" height="104">
+          <h1>EvCam</h1>
+          <p class="tagline">Votre téléphone devient la webcam<br>et le micro de votre PC.</p>
+        </div>
+
+        <div class="notice" id="notice" hidden></div>
+
+        <button class="card pc" id="btnSaved" type="button" hidden>
+          <span class="pc-ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2.5"/><path d="M8 20h8M12 16v4"/></svg></span>
+          <span class="pc-text"><b>Reconnecter à mon PC</b><small id="savedName">—</small></span>
+          <span class="chev"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></span>
+        </button>
+
+        <button class="primary" id="btnScan" type="button">
+          <svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10"/></svg>
+          Scanner le QR code
+        </button>
+        <button class="ghost" id="btnManual" type="button">Saisir l’adresse à la main</button>
+
+        <ol class="steps">
+          <li><span>1</span><p>Ouvrez <b>EvCam</b> sur votre PC.</p></li>
+          <li><span>2</span><p>Mettez le téléphone sur le <b>même Wi-Fi</b>.</p></li>
+          <li><span>3</span><p>Scannez le <b>QR code</b> affiché sur le PC.</p></li>
+        </ol>
+        <p class="version" id="version"></p>
+      </div>
+    </section>
+
+    <!-- Connexion en cours -->
+    <section class="view center" data-v="connecting">
+      <div class="inner small">
+        <div class="spinner"></div>
+        <h2>Connexion à votre PC…</h2>
+        <p id="connectingText">Recherche d’EvCam sur le réseau</p>
+        <button class="ghost" id="btnCancel" type="button">Changer de PC</button>
+      </div>
+    </section>
+
+    <!-- Scanner -->
+    <section class="view scan" data-v="scan">
+      <video id="video" playsinline muted autoplay></video>
+      <div class="frame" aria-hidden="true"><i></i><i></i><i></i><i></i><span></span></div>
+      <div class="scan-top"><b>Scannez le QR code</b><small>Affiché dans EvCam, sur votre PC</small></div>
+      <div class="scan-msg" id="scanMsg" hidden></div>
+      <button class="ghost light" id="btnScanBack" type="button">Annuler</button>
+      <canvas id="canvas" hidden></canvas>
+    </section>
+
+    <!-- Saisie manuelle -->
+    <section class="view" data-v="manual">
+      <div class="inner">
+        <h2>Saisir l’adresse</h2>
+        <p class="muted">Dans EvCam sur le PC, l’adresse et le code d’appairage sont affichés sous le QR code.</p>
+        <label class="field"><span>Adresse du PC</span>
+          <input id="inAddr" type="text" inputmode="url" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="192.168.1.20:4733"></label>
+        <label class="field"><span>Code d’appairage</span>
+          <input id="inCode" type="text" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="ex. AzvTnd31"></label>
+        <p class="error" id="manualErr" hidden></p>
+        <button class="primary" id="btnManualGo" type="button">Se connecter</button>
+        <button class="ghost" id="btnManualBack" type="button">Retour</button>
+      </div>
+    </section>
+
+    <!-- Autorisations -->
+    <section class="view center" data-v="perm">
+      <div class="inner small">
+        <div class="big-ico"><svg viewBox="0 0 24 24"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.8l1.3-1.7A1 1 0 0 1 9.4 4h5.2a1 1 0 0 1 .8.3L16.7 6h1.8A2.5 2.5 0 0 1 21 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5z"/><circle cx="12" cy="12.5" r="3.5"/></svg></div>
+        <h2>Autorisations nécessaires</h2>
+        <p>EvCam a besoin de la <b>caméra</b> et du <b>micro</b> pour les envoyer à votre PC. Rien n’est enregistré ni envoyé sur Internet.</p>
+        <button class="primary" id="btnPerm" type="button">Autoriser</button>
+        <button class="ghost" id="btnPermSettings" type="button">Ouvrir les réglages Android</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="jsQR.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

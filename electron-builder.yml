@@ -1,0 +1,65 @@
+appId: com.evcam.app
+productName: EvCam
+copyright: Copyright © 2026 EvCam
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - package.json
+  - src/**/*
+  - "!**/*.map"
+  - "!**/node_modules/**/{test,tests,__tests__,docs,doc,example,examples,.github}/**"
+  - "!**/node_modules/koffi/{doc,vendor}/**"
+
+extraResources:
+  - from: resources/vcam/x64
+    to: vcam/x64
+    filter:
+      - evcam_vcam.dll
+      - evcam-vcam-setup.exe
+  - from: resources/vcam/x86
+    to: vcam/x86
+    filter:
+      - evcam_vcam.dll
+      - evcam-vcam-setup.exe
+  - from: build/icon.ico
+    to: icon.ico
+  - from: android/build/EvCam.apk
+    to: android/EvCam.apk
+
+electronLanguages:
+  - fr
+  - en-US
+
+asar: true
+asarUnpack:
+  - "**/*.node"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: EvCam-Setup-${version}.${ext}
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  installerSidebar: build/installerSidebar.bmp
+  uninstallerSidebar: build/installerSidebar.bmp
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: EvCam
+  uninstallDisplayName: EvCam
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  language: "1036"
+  include: build/installer.nsh

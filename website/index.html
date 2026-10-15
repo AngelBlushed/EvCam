@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EvCam — Votre téléphone devient la webcam et le micro de votre PC</title>
+  <meta name="description" content="EvCam transforme votre téléphone en webcam et en micro sans fil pour Windows : une caméra virtuelle pour Zoom, Teams, Discord, OBS ou Meet. Gratuit, sans publicité, open source.">
+  <meta name="theme-color" content="#06070d">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="EvCam — Votre téléphone devient la webcam et le micro de votre PC">
+  <meta property="og:description" content="Caméra virtuelle et micro virtuel sans fil, en 1080p 60 i/s, même téléphone en veille. Gratuit et open source.">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/style.css">
+  <script>document.documentElement.classList.add('js');</script>
+  <noscript><style>.js .reveal { opacity: 1 !important; transform: none !important; }</style></noscript>
+</head>
+<body>
+
+<!-- icônes -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-github" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56 0-.27-.01-1-.02-1.96-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.14 0 1.55-.01 2.8-.01 3.18 0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5z"/></symbol>
+    <symbol id="i-windows" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5.4 10.4 4.4v7H3V5.4zm8.6-1.1L21 3v8.4h-9.4V4.3zM3 12.6h7.4v7L3 18.6v-6zm8.6 0H21V21l-9.4-1.3v-7.1z"/></symbol>
+    <symbol id="i-android" viewBox="0 0 24 24"><path fill="currentColor" d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V8H6v10zM3.5 8C2.67 8 2 8.67 2 9.5v7c0 .83.67 1.5 1.5 1.5S5 17.33 5 16.5v-7C5 8.67 4.33 8 3.5 8zm17 0c-.83 0-1.5.67-1.5 1.5v7c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-4.97-5.84 1.3-1.3c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.48 1.48C13.85 1.23 12.95 1 12 1c-.96 0-1.86.23-2.66.63L7.85.15c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.31 1.31C6.97 3.26 6 5.01 6 7h12c0-1.99-.97-3.75-2.47-4.84zM10 5H9V4h1v1zm5 0h-1V4h1v1z"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M12 4v14m0 0 6-6m-6 6-6-6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 3 5 6v5.5c0 4.3 2.9 8.2 7 9.5 4.1-1.3 7-5.2 7-9.5V6l-7-3zm-3 8.8 2.4 2.4L15.6 10"/></symbol>
+  </defs>
+</svg>
+
+<div class="bg" aria-hidden="true"></div>
+
+<header class="nav" id="nav">
+  <a class="brand" href="#top" aria-label="EvCam, accueil">
+    <img src="assets/logo.svg" alt="" width="34" height="34">
+    <span>EvCam</span><span class="badge">GRATUIT</span>
+  </a>
+  <nav class="nav-links" aria-label="Sections">
+    <a href="#etapes">Fonctionnement</a>
+    <a href="#visite">Visite guidée</a>
+    <a href="#veille">Téléphone en veille</a>
+    <a href="#micro">Micro virtuel</a>
+    <a href="#faq">Questions</a>
+  </nav>
+  <div class="nav-cta">
+    <a class="btn sm ghost-hide" href="https://github.com/AngelBlushed/EvCam" target="_blank" rel="noopener"><svg><use href="#i-github"/></svg>GitHub</a>
+    <a class="btn sm primary" href="#telecharger">Télécharger</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ============================================================ HERO -->
+  <section class="wrap hero">
+    <div>
+      <span class="eyebrow-chip reveal"><i></i>Gratuit · sans publicité · open source</span>
+      <h1 class="reveal d1">Votre téléphone devient la <span class="grad">webcam</span> et le <span class="grad">micro</span> de votre PC.</h1>
+      <p class="lead reveal d2">EvCam crée une caméra virtuelle et un micro virtuel que Zoom, Teams, Discord, OBS ou Meet voient comme du vrai matériel. Sans fil, jusqu’en 1080p à 60 images par seconde, et la diffusion continue même téléphone en veille.</p>
+
+      <div class="cta-stack reveal d3" id="cta">
+        <a class="btn github" href="https://github.com/AngelBlushed/EvCam" target="_blank" rel="noopener"><svg><use href="#i-github"/></svg>Voir le GitHub</a>
+        <div class="cta-cap"><svg><use href="#i-down"/></svg>Téléchargement rapide depuis le GitHub</div>
+        <div class="cta-row">
+          <a class="btn primary" href="https://github.com/AngelBlushed/EvCam/releases/latest/download/EvCam-Setup.exe"><svg><use href="#i-windows"/></svg>Installer .exe</a>
+          <a class="btn primary" href="https://github.com/AngelBlushed/EvCam/releases/latest/download/EvCam.apk"><svg><use href="#i-android"/></svg>Installer .apk</a>
+        </div>
+        <p class="cta-note"><b>.exe</b> pour votre PC Windows 10/11 · <b>.apk</b> pour votre téléphone Android 8+ · version 1.4.0</p>
+      </div>
+    </div>
+
+    <div class="hero-visual reveal d2">
+      <div class="hero-frame" id="heroFrame">
+        <span class="chip-float a"><i class="dot"></i>En direct<small>SM-S921B · 1080×1920 · 34 i/s</small></span>
+        <span class="chip-float b"><i class="dot ok"></i>H.264 matériel</span>
+        <span class="chip-float c">Latence<small>119 ms</small></span>
+        <figure class="shot glow">
+          <img src="assets/shots/live.webp" width="1159" height="817" alt="Aperçu en direct dans EvCam&nbsp;: l’image de la caméra du téléphone avec la latence, le débit, la résolution reçue et la batterie du téléphone" fetchpriority="high">
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap">
+    <div class="stats reveal">
+      <div class="stat"><b>1080p · 60 i/s</b><span>Qualité réglable jusqu’au Full HD</span></div>
+      <div class="stat"><b>H.264 matériel</b><span>La puce vidéo du téléphone, peu de batterie</span></div>
+      <div class="stat"><b>0 € · 0 pub</b><span>Gratuit, code ouvert (licence MIT)</span></div>
+      <div class="stat"><b>100 % local</b><span>Votre image reste sur votre réseau Wi-Fi</span></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ FONCTIONNEMENT -->
+  <section class="wrap section" id="etapes">
+    <div class="section-head center reveal">
+      <span class="kicker">Fonctionnement</span>
+      <h2>Trois étapes, aucune prise de tête.</h2>
+      <p class="section-lead">Pas de câble, pas de compte, pas de configuration compliquée&nbsp;: vous installez, vous scannez, vous choisissez «&nbsp;EvCam&nbsp;».</p>
+    </div>
+    <div class="steps">
+      <article class="card reveal"><div class="num">1</div><h3>Installez EvCam sur le PC</h3><p>L’installateur Windows ajoute la caméra virtuelle «&nbsp;EvCam&nbsp;» (applications 64 et 32 bits). Si votre PC n’a pas encore de micro virtuel, il vous propose de le raccorder — c’est expliqué plus bas.</p></article>
+      <article class="card reveal d1"><div class="num">2</div><h3>Scannez le QR code</h3><p>Ouvrez l’appli Android EvCam (ou l’appareil photo de n’importe quel téléphone) et visez le QR code affiché sur le PC. La diffusion démarre toute seule.</p></article>
+      <article class="card reveal d2"><div class="num">3</div><h3>Choisissez «&nbsp;EvCam&nbsp;» partout</h3><p>Dans Zoom, Teams, Discord, OBS ou Meet, sélectionnez la caméra «&nbsp;EvCam&nbsp;» et le micro «&nbsp;EvCam Micro&nbsp;». C’est tout.</p></article>
+    </div>
+  </section>
+
+  <!-- ============================================================ VISITE GUIDÉE -->
+  <section class="wrap section" id="visite">
+    <div class="section-head reveal">
+      <span class="kicker">Visite guidée</span>
+      <h2>À quoi ressemble EvCam, écran par écran.</h2>
+      <p class="section-lead">Une interface sombre, claire et sans menus cachés. Voici chaque écran de l’application, tel qu’il s’affiche sur le PC. Cliquez sur une image pour l’agrandir.</p>
+    </div>
+    <nav class="tour-nav reveal" aria-label="Aller à un écran">
+      <a href="#s1">Bienvenue</a><a href="#s2">QR code</a><a href="#s3">Direct</a><a href="#s4">Caméra</a><a href="#s5">Objectif</a><a href="#s6">Batterie</a><a href="#s7">Micro</a><a href="#s8">Micro virtuel</a><a href="#s9">Diagnostic</a><a href="#s10">Connexion</a><a href="#s11">Démarrage</a>
+    </nav>
+
+    <!-- 01 -->
+    <article class="feature" id="s1">
+      <div class="feature-text reveal">
+        <span class="idx"><b>01</b>Bienvenue</span>
+        <h3>Un accueil qui va droit au but.</h3>
+        <p>Au premier lancement, EvCam résume l’essentiel en trois cartes&nbsp;: la caméra virtuelle «&nbsp;EvCam&nbsp;» à choisir dans vos applications, le micro du téléphone qui devient «&nbsp;EvCam Micro&nbsp;», et le fonctionnement sans fil — rien à installer côté téléphone, il suffit de scanner un QR code.</p>
+        <ul class="ticks">
+          <li><b>Caméra virtuelle «&nbsp;EvCam&nbsp;»</b> à choisir dans Zoom, Teams, Discord, OBS, Meet…</li>
+          <li><b>Micro du téléphone</b> devenu «&nbsp;EvCam Micro&nbsp;», avec le pilote gratuit VB-CABLE installé pour vous si besoin</li>
+          <li><b>Sans fil</b>&nbsp;: scannez simplement le QR code avec l’appareil photo</li>
+          <li>Option recommandée&nbsp;: <b>lancer EvCam au démarrage de Windows</b>, la caméra est prête avant d’ouvrir vos applications</li>
+        </ul>
+      </div>
+      <figure class="shot glow reveal d1" style="--w: 420px"><img src="assets/shots/welcome.webp" width="700" height="962" loading="lazy" decoding="async" alt="Écran de bienvenue d’EvCam&nbsp;: trois cartes (caméra virtuelle, micro du téléphone, sans fil), l’option de lancement au démarrage de Windows et le bouton «&nbsp;C’est parti&nbsp;»"></figure>
+    </article>
+
+    <!-- 02 -->
+    <article class="feature flip" id="s2">
+      <div class="feature-text reveal">
+        <span class="idx"><b>02</b>Connexion</span>
+        <h3>«&nbsp;Connectez votre téléphone&nbsp;»&nbsp;: un QR code, c’est tout.</h3>
+        <p>L’écran d’accueil de l’application affiche un grand QR code, l’adresse locale du PC et un code d’appairage. Trois étapes illustrées&nbsp;: même Wi-Fi, scan du QR code, autorisation de la caméra et du micro.</p>
+        <ul class="ticks">
+          <li>Le <b>QR code</b>, l’adresse et le <b>code d’appairage</b> en un coup d’œil</li>
+          <li>Barre d’état en bas&nbsp;: <b>caméra virtuelle prête</b>, <b>micro virtuel</b>, <b>pare-feu</b>, <b>réseau</b> — ce qui manque est signalé en orange</li>
+          <li>Un avertissement du navigateur est normal avec un certificat local&nbsp;: «&nbsp;Avancé&nbsp;» puis «&nbsp;Continuer&nbsp;» (l’appli Android, elle, n’en affiche aucun)</li>
+        </ul>
+        <p class="note"><b>Capture&nbsp;:</b> le QR code, l’adresse réseau et le code d’appairage ont été masqués en rouge.</p>
+      </div>
+      <figure class="shot glow reveal d1"><img src="assets/shots/connect.webp" width="1728" height="1074" loading="lazy" decoding="async" alt="Écran «&nbsp;Connectez votre téléphone&nbsp;»&nbsp;: QR code (masqué), trois étapes, adresse et code d’appairage masqués, et la barre d’état caméra virtuelle prête, micro virtuel, pare-feu à autoriser, réseau"></figure>
+    </article>
+
+    <!-- 03 -->
+    <article class="feature" id="s3">
+      <div class="feature-text reveal">
+        <span class="idx"><b>03</b>En direct</span>
+        <h3>L’image du téléphone, en direct, avec ses chiffres.</h3>
+        <p>Dès que le téléphone est connecté, l’aperçu prend toute la place. Deux pastilles indiquent le modèle du téléphone et la résolution diffusée ; quatre tuiles dessous donnent la santé de la liaison.</p>
+        <ul class="ticks">
+          <li><b>Latence</b> en millisecondes, avec sa courbe</li>
+          <li><b>Débit</b> en Mb/s, avec sa courbe</li>
+          <li><b>Image reçue</b>&nbsp;: résolution, images par seconde et codec (ici 1080×1920, 34 i/s, H264)</li>
+          <li><b>Téléphone</b>&nbsp;: modèle et niveau de batterie</li>
+        </ul>
+      </div>
+      <figure class="shot glow reveal d1"><img src="assets/shots/live.webp" width="1159" height="817" loading="lazy" decoding="async" alt="Aperçu en direct&nbsp;: image de la caméra du téléphone SM-S921B en 1080×1920 à 34 images par seconde, avec les tuiles latence 119 ms, débit 21,2 Mb/s, image reçue et batterie 19 %"></figure>
+    </article>
+
+    <!-- 04 -->
+    <article class="feature flip" id="s4">
+      <div class="feature-text reveal">
+        <span class="idx"><b>04</b>Caméra</span>
+        <h3>Tous les réglages vidéo, sans menu caché.</h3>
+        <p>L’onglet «&nbsp;Caméra&nbsp;» commence par l’état de la caméra virtuelle («&nbsp;EvCam&nbsp;», 1920×1080, 60 i/s, badge «&nbsp;Prête&nbsp;»), puis enchaîne les réglages en boutons segmentés faciles à toucher.</p>
+        <ul class="ticks">
+          <li><b>Vidéo du téléphone</b>&nbsp;: un interrupteur pour n’utiliser que le micro — la caméra du téléphone s’éteint, ce qui économise la batterie</li>
+          <li><b>Qualité</b> 480p, 720p ou 1080p · <b>Fluidité</b> 24, 30 ou 60 images par seconde</li>
+          <li><b>Cadrage</b> «&nbsp;Ajuster&nbsp;» (bandes) ou «&nbsp;Remplir&nbsp;» · <b>Orientation</b> 0°, 90°, 180°, 270°</li>
+          <li><b>Effet miroir</b> et choix de la caméra du téléphone&nbsp;: <b>avant</b> ou <b>arrière</b></li>
+        </ul>
+      </div>
+      <figure class="shot glow reveal d1" style="--w: 360px"><img src="assets/shots/camera.webp" width="550" height="1060" loading="lazy" decoding="async" alt="Onglet Caméra&nbsp;: caméra virtuelle EvCam 1920×1080 à 60 i/s prête, interrupteur vidéo du téléphone, qualité 1080p, fluidité 60, cadrage remplir, orientation, effet miroir, caméra avant ou arrière"></figure>
+    </article>
+
+    <!-- 05 -->
+    <article class="feature" id="s5">
+      <div class="feature-text reveal">
+        <span class="idx"><b>05</b>Objectif</span>
+        <h3>Objectif, dézoom et flash.</h3>
+        <p>EvCam liste les objectifs que le téléphone expose (ici «&nbsp;4 objectifs détectés&nbsp;») et ajoute un vrai travail sur le champ de vision.</p>
+        <ul class="ticks">
+          <li><b>Zoom</b> du téléphone quand il est disponible, sinon choisissez un autre objectif</li>
+          <li><b>Dézoom numérique</b> de 0 à 90 %&nbsp;: l’image est réduite dans le cadre et le tour est rempli en <b>flou</b>, en <b>miroir</b> ou en <b>noir</b></li>
+          <li><b>Champ large 4:3</b>&nbsp;: capture tout le capteur, plus de décor en hauteur qu’en 16:9</li>
+          <li>Boutons <b>Dézoom maximal</b> et <b>Réinitialiser</b>, liste des <b>objectifs</b></li>
+          <li><b>Flash / lumière</b>&nbsp;: la lampe sur la caméra arrière, et sur la caméra avant l’écran du téléphone devient une lumière d’appoint</li>
+        </ul>
+        <p class="note"><b>Honnêteté&nbsp;:</b> le dézoom numérique ne montre pas plus de décor que l’objectif n’en voit ; la vraie ultra grand-angle dépend de ce que le téléphone expose.</p>
+      </div>
+      <figure class="shot glow reveal d1" style="--w: 360px"><img src="assets/shots/lens.webp" width="547" height="982" loading="lazy" decoding="async" alt="Carte Objectif, dézoom et flash&nbsp;: zoom, dézoom numérique, fond autour de l’image (flou, miroir, noir), champ large 4:3, boutons dézoom maximal et réinitialiser, choix de l’objectif, flash"></figure>
+    </article>
+
+    <!-- 06 -->
+    <article class="feature flip" id="s6">
+      <div class="feature-text reveal">
+        <span class="idx"><b>06</b>Batterie</span>
+        <h3>Pensé pour ne pas vider (ni abîmer) la batterie.</h3>
+        <p>La carte «&nbsp;Batterie du téléphone&nbsp;» affiche le niveau en direct, l’état («&nbsp;Normal&nbsp;» ou «&nbsp;Économie&nbsp;») et deux leviers très efficaces.</p>
+        <ul class="ticks">
+          <li><b>Mode économie</b>&nbsp;: 720p maximum, 24 images/s, débit réduit et écran du téléphone noir automatiquement</li>
+          <li><b>Encodage vidéo</b>&nbsp;: «&nbsp;H.264 matériel&nbsp;» utilise la puce vidéo du téléphone, bien moins gourmande que le VP8 logiciel</li>
+          <li>Repasse <b>automatiquement en VP8</b> («&nbsp;compatible&nbsp;») si le téléphone ne sait pas encoder en H.264</li>
+          <li>EvCam estime l’<b>autonomie restante</b> et vous prévient à 20 % et 10 %</li>
+        </ul>
+      </div>
+      <figure class="shot glow reveal d1" style="--w: 500px"><img src="assets/shots/battery.webp" width="535" height="439" loading="lazy" decoding="async" alt="Carte Batterie du téléphone&nbsp;: batterie 19 %, état normal, mode économie, encodage vidéo H.264 matériel ou VP8 compatible"></figure>
+    </article>
+
+    <!-- 07 -->
+    <article class="feature" id="s7">
+      <div class="feature-text reveal">
+        <span class="idx"><b>07</b>Micro</span>
+        <h3>Le micro du téléphone, réglé comme une console de studio.</h3>
+        <p>La carte «&nbsp;Micro du téléphone&nbsp;» indique d’où vient le son («&nbsp;Reçu de SM-S921B&nbsp;»), affiche un vumètre en décibels et regroupe les réglages qui comptent.</p>
+        <ul class="ticks">
+          <li><b>Volume</b> de 0 à 200 %</li>
+          <li><b>Décalage audio</b> de 0 à 500 ms pour caler le son sur l’image (synchro des lèvres)</li>
+          <li><b>Réduction du bruit</b>&nbsp;: filtre appliqué par le téléphone</li>
+          <li><b>Couper le micro</b> d’un geste&nbsp;: le téléphone n’envoie plus de son</li>
+        </ul>
+      </div>
+      <figure class="shot glow reveal d1" style="--w: 440px"><img src="assets/shots/mic.webp" width="528" height="649" loading="lazy" decoding="async" alt="Carte Micro du téléphone&nbsp;: en direct, vumètre, volume 100 %, décalage audio, réduction du bruit activée, couper le micro"></figure>
+    </article>
+
+    <!-- 08 -->
+    <article class="feature flip" id="s8">
+      <div class="feature-text reveal">
+        <span class="idx"><b>08</b>Micro virtuel</span>
+        <h3>«&nbsp;EvCam Micro&nbsp;», prêt pour toutes vos applications.</h3>
+        <p>La carte «&nbsp;Micro virtuel&nbsp;» transforme le son reçu en un vrai micro Windows. Le badge «&nbsp;Prêt&nbsp;» confirme que tout est en place, et l’application vous dit quel nom choisir.</p>
+        <ul class="ticks">
+          <li>Périphérique de sortie&nbsp;: le câble audio virtuel (<b>VB-CABLE</b>)</li>
+          <li>Dans vos applications, choisissez <b>«&nbsp;EvCam Micro&nbsp;»</b> comme micro</li>
+          <li><b>Rétablir le nom d’origine</b> à tout moment — votre micro Windows habituel n’est <b>jamais</b> modifié</li>
+          <li><b>Écouter sur ce PC</b>&nbsp;: retour dans vos haut-parleurs ou votre casque</li>
+        </ul>
+        <p class="note">Vous n’avez pas encore de micro virtuel&nbsp;? <a class="link" href="#micro">Voyez comment EvCam vous le raccorde</a>.</p>
+      </div>
+      <figure class="shot glow reveal d1" style="--w: 460px"><img src="assets/shots/virtual-mic.webp" width="552" height="574" loading="lazy" decoding="async" alt="Carte Micro virtuel&nbsp;: prêt, périphérique CABLE Input, nom du micro dans vos applications «&nbsp;EvCam Micro&nbsp;», bouton rétablir le nom d’origine, écouter sur ce PC"></figure>
+    </article>
+
+    <!-- 09 -->
+    <article class="feature" id="s9">
+      <div class="feature-text reveal">
+        <span class="idx"><b>09</b>Diagnostic</span>
+        <h3>Un coup de main intégré quand une application fait des caprices.</h3>
+        <p>L’onglet «&nbsp;Réglages&nbsp;» contient une carte «&nbsp;Diagnostic&nbsp;» pour vérifier que tout fonctionne — sans toucher au PC.</p>
+        <ul class="ticks">
+          <li><b>Mire de test</b>&nbsp;: envoie une image de test à la caméra virtuelle, sans téléphone</li>
+          <li><b>Forcer la détection</b>&nbsp;: réenregistre la caméra (64 et 32 bits) et demande aux applications d’actualiser leurs périphériques — pratique pour Discord</li>
+          <li><b>Réparer la caméra virtuelle</b>&nbsp;: «&nbsp;Tout est en ordre&nbsp;: «&nbsp;EvCam&nbsp;» est enregistrée.&nbsp;»</li>
+        </ul>
+      </div>
+      <figure class="shot glow reveal d1" style="--w: 460px"><img src="assets/shots/diagnostic.webp" width="540" height="507" loading="lazy" decoding="async" alt="Carte Diagnostic&nbsp;: mire de test, forcer la détection, réparer la caméra virtuelle"></figure>
+    </article>
+
+    <!-- 10 -->
+    <article class="feature flip" id="s10">
+      <div class="feature-text reveal">
+        <span class="idx"><b>10</b>Connexion réseau</span>
+        <h3>Réseau, port et sécurité, sous contrôle.</h3>
+        <p>La carte «&nbsp;Connexion&nbsp;» règle tout ce qui touche au réseau local, avec des explications claires à chaque ligne.</p>
+        <ul class="ticks">
+          <li><b>Réseau utilisé pour le QR code</b>&nbsp;: choisissez la bonne carte réseau si le PC en a plusieurs</li>
+          <li><b>Port</b> modifiable, avec un bouton «&nbsp;Appliquer&nbsp;»</li>
+          <li><b>Pare-feu Windows</b>&nbsp;: l’état est affiché et un bouton «&nbsp;Autoriser&nbsp;» ouvre ce qu’il faut</li>
+          <li><b>Code d’appairage</b>&nbsp;: «&nbsp;Régénérer&nbsp;» invalide les anciens QR codes</li>
+        </ul>
+        <p class="note"><b>Capture&nbsp;:</b> le réseau et le port ont été masqués en rouge.</p>
+      </div>
+      <figure class="shot glow reveal d1" style="--w: 480px"><img src="assets/shots/network.webp" width="802" height="913" loading="lazy" decoding="async" alt="Carte Connexion&nbsp;: réseau utilisé pour le QR code (masqué), port (masqué), pare-feu Windows à autoriser, code d’appairage à régénérer"></figure>
+    </article>
+
+    <!-- 11 -->
+    <article class="feature" id="s11">
+      <div class="feature-text reveal">
+        <span class="idx"><b>11</b>Démarrage</span>
+        <h3>Prêt dès l’ouverture de Windows — et une croix qui se fait comprendre.</h3>
+        <p>La carte «&nbsp;Démarrage&nbsp;» décide du comportement au lancement, et de ce que fait la croix de la fenêtre.</p>
+        <ul class="ticks">
+          <li><b>Lancer EvCam au démarrage de Windows</b>&nbsp;: démarre discrètement, la caméra est déjà là quand vous ouvrez Zoom ou Teams</li>
+          <li><b>Démarrer réduit</b>&nbsp;: sans ouvrir la fenêtre au lancement automatique</li>
+          <li><b>Quand je clique sur la croix</b>&nbsp;: «&nbsp;Demander&nbsp;», «&nbsp;Réduire&nbsp;» ou «&nbsp;Fermer&nbsp;»</li>
+          <li>Par défaut, un clic sur la croix ouvre un petit panneau avec <b>deux boutons seulement</b>&nbsp;: <b>Réduire</b> (EvCam reste près de l’horloge) ou <b>Fermer</b> (EvCam s’arrête vraiment)</li>
+        </ul>
+      </div>
+      <div class="shot-stack reveal d1">
+        <figure class="shot glow" style="--w: 440px"><img src="assets/shots/startup.webp" width="728" height="744" loading="lazy" decoding="async" alt="Carte Démarrage&nbsp;: lancer EvCam au démarrage de Windows, démarrer réduit, et le choix du comportement de la croix (demander, réduire, fermer)"></figure>
+        <figure class="shot" style="--w: 440px"><img src="assets/shots/close-panel.webp" width="760" height="452" loading="lazy" decoding="async" alt="Panneau «&nbsp;Fermer EvCam&nbsp;?&nbsp;» avec deux boutons&nbsp;: Réduire et Fermer"><figcaption>Le panneau qui s’affiche quand on clique sur la croix.</figcaption></figure>
+      </div>
+    </article>
+
+    <!-- ============================================================ VEILLE -->
+    <div class="spot reveal" id="veille">
+      <div class="feature flip">
+        <div class="feature-text">
+          <span class="kicker">Téléphone en veille</span>
+          <h2>Ça continue, même écran éteint.</h2>
+          <p class="section-lead" style="margin-top:14px">Verrouillez le téléphone ou passez sur une autre application&nbsp;: l’appli Android garde la diffusion active grâce à un service de premier plan, et le micro reste actif.</p>
+          <ul class="ticks">
+            <li><b>Micro</b>&nbsp;: il continue en veille, sans coupure</li>
+            <li><b>Caméra</b>&nbsp;: si Android la coupe écran éteint, EvCam passe seul en «&nbsp;micro seul&nbsp;» (le PC affiche «&nbsp;Téléphone en veille&nbsp;») puis <b>rallume la caméra dès que l’écran revient</b></li>
+            <li>La <b>première fois</b>, Samsung (et d’autres marques) demande d’arrêter l’optimisation de la batterie pour EvCam&nbsp;: appuyez sur <b>OK</b> pour que la diffusion ne soit pas coupée en arrière-plan</li>
+          </ul>
+          <p class="note"><b>À savoir&nbsp;:</b> autoriser EvCam à tourner en arrière-plan consomme un peu plus de batterie. Sur iPhone ou dans un navigateur, le système fige la page écran éteint&nbsp;: gardez l’écran allumé (l’option «&nbsp;écran noir&nbsp;» économise la batterie).</p>
+        </div>
+        <figure class="shot glow" style="--w: 560px"><img src="assets/shots/sleep-samsung.webp" width="1342" height="795" loading="lazy" decoding="async" alt="Fenêtre Android «&nbsp;Arrêter optimisation utilisation batterie&nbsp;?&nbsp;»&nbsp;: l’application EvCam pourra être exécutée en arrière-plan, son utilisation de la batterie ne sera pas limitée"><figcaption>La demande d’Android (ici sur Samsung) la première fois&nbsp;: «&nbsp;OK&nbsp;» permet à EvCam de continuer en veille.</figcaption></figure>
+      </div>
+    </div>
+
+    <!-- ============================================================ MICRO / VB-CABLE -->
+    <div class="spot reveal" id="micro">
+      <div class="feature">
+        <div class="feature-text">
+          <span class="kicker">Micro virtuel · VB-CABLE</span>
+          <h2>Pas de micro virtuel&nbsp;? EvCam vous le raccorde — depuis le site officiel.</h2>
+          <p class="section-lead" style="margin-top:14px">Windows n’autorise un micro virtuel qu’avec un pilote signé par Microsoft. EvCam s’appuie donc sur <a class="link" href="https://vb-audio.com/Cable/" target="_blank" rel="noopener">VB-CABLE</a>, un pilote gratuit de VB-Audio, et vous évite toute la corvée&nbsp;: <b>l’installateur vous propose simplement le raccord vers le téléchargement officiel</b>.</p>
+          <ul class="ticks">
+            <li><b>Un raccord, pas un pilote caché</b>&nbsp;: rien n’est embarqué dans EvCam, le pilote est téléchargé depuis <b>vb-audio.com</b>, le site officiel</li>
+            <li><b>Proposé uniquement à ceux qui ne l’ont pas déjà</b>&nbsp;: si VB-CABLE est déjà installé sur votre PC, aucune question n’est posée et rien n’est téléchargé</li>
+            <li><b>Vous décidez</b>&nbsp;: «&nbsp;Oui&nbsp;» ou «&nbsp;Non&nbsp;» ; avec «&nbsp;Non&nbsp;», vous pouvez l’installer plus tard depuis EvCam, onglet «&nbsp;Micro&nbsp;»</li>
+            <li><b>Sécurisé</b>&nbsp;: la signature numérique du pilote est vérifiée avant l’installation, et Windows demande l’autorisation administrateur (c’est le seul moment où elle est requise)</li>
+          </ul>
+          <span class="pill-ok"><svg><use href="#i-shield"/></svg>Aucun téléchargement sans votre accord</span>
+        </div>
+        <div class="shot-stack">
+          <figure class="shot glow" style="--w: 520px"><img src="assets/shots/vb-prompt.webp" width="606" height="390" loading="lazy" decoding="async" alt="Fenêtre de l’installateur EvCam&nbsp;: «&nbsp;Micro virtuel pour vos applications&nbsp;», EvCam peut créer le micro EvCam Micro en installant le pilote gratuit VB-CABLE, téléchargement officiel depuis vb-audio.com, signature vérifiée, autorisation administrateur, boutons Oui et Non"><figcaption>La demande affichée par l’installateur — uniquement si aucun câble audio virtuel n’est détecté.</figcaption></figure>
+          <figure class="shot" style="--w: 400px"><img src="assets/shots/install-offer.webp" width="728" height="974" loading="lazy" decoding="async" alt="Dans l’application, onglet Micro&nbsp;: «&nbsp;Aucun micro virtuel sur ce PC&nbsp;», EvCam peut l’installer pour vous, bouton Installer le micro virtuel et lien vers le site du pilote"><figcaption>La même proposition, plus tard, dans l’onglet «&nbsp;Micro&nbsp;» de l’application.</figcaption></figure>
+        </div>
+      </div>
+      <ol class="timeline">
+        <li><b>La demande</b>Une seule question, avec «&nbsp;Oui&nbsp;» ou «&nbsp;Non&nbsp;».</li>
+        <li><b>Téléchargement officiel</b>Le paquet vient de vb-audio.com (≈ 1,3 Mo).</li>
+        <li><b>Vérification</b>La signature numérique est contrôlée avant tout.</li>
+        <li><b>«&nbsp;EvCam Micro&nbsp;» prêt</b>Windows demande l’accord administrateur, puis le micro apparaît.</li>
+      </ol>
+      <p class="note" style="margin-top:22px">VB-CABLE est un logiciel de <a class="link" href="https://vb-audio.com/" target="_blank" rel="noopener">VB-Audio</a> (donationware). EvCam ne le redistribue pas&nbsp;: il le télécharge, avec votre accord, depuis le site de son auteur. Si vous l’appréciez, pensez à le soutenir.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================ COMPATIBILITÉ -->
+  <section class="wrap section" id="compat">
+    <div class="section-head center reveal">
+      <span class="kicker">Compatibilité</span>
+      <h2>Partout où une webcam est acceptée.</h2>
+      <p class="section-lead">EvCam apparaît comme une vraie caméra et un vrai micro&nbsp;: aucune application à configurer en particulier.</p>
+    </div>
+    <div class="chips reveal">
+      <span>Zoom</span><span>Microsoft Teams</span><span>Discord</span><span>OBS Studio</span><span>Google Meet</span><span>Skype</span><span>Chrome</span><span>Edge</span><span>Firefox</span><span>Streamlabs</span>
+    </div>
+    <div class="compat-grid">
+      <article class="card reveal"><h3>PC Windows 10 et 11</h3><p>Installateur classique, sans droits administrateur par défaut. Caméra virtuelle compatible avec les applications 64 et 32 bits.</p></article>
+      <article class="card reveal d1"><h3>Téléphone Android 8+</h3><p>Appli dédiée (APK)&nbsp;: scan du QR code, reconnexion automatique, vérification du certificat du PC, diffusion en veille.</p></article>
+      <article class="card reveal d2"><h3>iPhone et autres navigateurs</h3><p>Rien à installer&nbsp;: scannez le QR code avec l’appareil photo et ouvrez la page. Gardez l’écran allumé pendant la diffusion.</p></article>
+    </div>
+  </section>
+
+  <!-- ============================================================ TÉLÉCHARGEMENT -->
+  <section class="wrap" id="telecharger">
+    <div class="download reveal">
+      <span class="kicker">Télécharger</span>
+      <h2>Prêt en deux minutes.</h2>
+      <p class="section-lead" style="margin-inline:auto">Gratuit, sans compte, sans publicité. Les fichiers sont ceux de la dernière version publiée sur GitHub.</p>
+      <div class="cta-stack">
+        <a class="btn github" href="https://github.com/AngelBlushed/EvCam" target="_blank" rel="noopener"><svg><use href="#i-github"/></svg>Voir le GitHub</a>
+        <div class="cta-cap"><svg><use href="#i-down"/></svg>Téléchargement rapide depuis le GitHub</div>
+        <div class="cta-row">
+          <a class="btn primary" href="https://github.com/AngelBlushed/EvCam/releases/latest/download/EvCam-Setup.exe"><svg><use href="#i-windows"/></svg>Installer .exe</a>
+          <a class="btn primary" href="https://github.com/AngelBlushed/EvCam/releases/latest/download/EvCam.apk"><svg><use href="#i-android"/></svg>Installer .apk</a>
+        </div>
+      </div>
+      <div class="dl-help">
+        <article class="card"><h3>Sur le PC (.exe)</h3><p>Windows peut afficher «&nbsp;Windows a protégé votre PC&nbsp;»&nbsp;: l’installateur n’est pas signé numériquement (un certificat est payant). Cliquez sur <b>Informations complémentaires</b> puis <b>Exécuter quand même</b>. Si le pare-feu le demande, cliquez sur <b>Autoriser</b>.</p></article>
+        <article class="card"><h3>Sur le téléphone (.apk)</h3><p>Ouvrez le fichier et autorisez «&nbsp;Installer des applications inconnues&nbsp;» pour la source utilisée (réglage Android, une seule fois). Ouvrez EvCam, autorisez caméra et micro, puis scannez le QR code du PC.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ FAQ -->
+  <section class="wrap section" id="faq">
+    <div class="section-head center reveal">
+      <span class="kicker">Questions fréquentes</span>
+      <h2>Tout ce qu’on demande avant d’essayer.</h2>
+    </div>
+    <div class="faq reveal">
+      <details><summary>EvCam est-il vraiment gratuit&nbsp;?</summary><p>Oui&nbsp;: gratuit, sans publicité, sans compte. Le code est ouvert sur GitHub (licence MIT).</p></details>
+      <details><summary>Mon image passe-t-elle par Internet&nbsp;?</summary><p>Non. Le téléphone envoie l’image et le son directement au PC, sur votre réseau Wi-Fi local. Le QR code contient un jeton d’appairage et l’empreinte du certificat du PC, que l’appli Android vérifie&nbsp;: rien ne sort de votre réseau.</p></details>
+      <details><summary>Pourquoi le micro passe-t-il par VB-CABLE&nbsp;?</summary><p>Windows ne permet de créer un micro virtuel qu’avec un pilote signé par Microsoft, ce qu’EvCam ne peut pas fournir. VB-CABLE en est un, gratuit. EvCam vous propose de le raccorder depuis le site officiel de VB-Audio, uniquement si vous ne l’avez pas déjà, et le renomme «&nbsp;EvCam Micro&nbsp;» sans jamais toucher à votre micro habituel.</p></details>
+      <details><summary>Discord ne voit pas la caméra EvCam.</summary><p>Discord ne relit sa liste de caméras qu’au démarrage. Dans EvCam, onglet Caméra puis la carte Discord&nbsp;: «&nbsp;Redémarrer Discord&nbsp;», ou «&nbsp;Forcer la détection&nbsp;» dans les réglages. EvCam doit être ouvert (la barre système suffit).</p></details>
+      <details><summary>Le téléphone n’arrive pas à se connecter.</summary><p>Vérifiez que le téléphone et le PC sont sur le même Wi-Fi, qu’EvCam est ouvert, et que le pare-feu Windows est autorisé (bouton «&nbsp;Autoriser&nbsp;» dans les réglages). Désactivez aussi l’«&nbsp;isolation des clients&nbsp;» du Wi-Fi invité si votre box en propose une.</p></details>
+      <details><summary>L’application «&nbsp;Caméra&nbsp;» de Windows ne montre pas EvCam.</summary><p>L’application Caméra du Microsoft Store ne liste pas les caméras virtuelles de ce type. Utilisez EvCam dans un navigateur, Zoom, Teams, OBS, Discord…</p></details>
+      <details><summary>Puis-je n’utiliser que le micro du téléphone&nbsp;?</summary><p>Oui&nbsp;: l’interrupteur «&nbsp;Vidéo du téléphone&nbsp;» éteint la caméra du téléphone (pas de voyant, bien moins de batterie) et seul le micro est envoyé. Réactivez la vidéo quand vous voulez.</p></details>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <a class="brand" href="#top"><img src="assets/logo.svg" alt="" width="34" height="34"><span>EvCam</span></a>
+      <nav class="foot-links" aria-label="Liens">
+        <a href="https://github.com/AngelBlushed/EvCam" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/AngelBlushed/EvCam/releases" target="_blank" rel="noopener">Versions</a>
+        <a href="https://github.com/AngelBlushed/EvCam/issues" target="_blank" rel="noopener">Signaler un problème</a>
+        <a href="https://vb-audio.com/Cable/" target="_blank" rel="noopener">VB-CABLE</a>
+      </nav>
+    </div>
+    <p class="credits">EvCam est un logiciel libre sous licence MIT. Caméra virtuelle dérivée de Softcam (MIT, © tshino) · lecture de QR code&nbsp;: jsQR (Apache-2.0) · police Inter (SIL OFL) · micro virtuel&nbsp;: VB-CABLE, © VB-Audio, téléchargé depuis son site officiel. Les marques citées appartiennent à leurs propriétaires.</p>
+  </div>
+</footer>
+
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Capture agrandie"><img alt=""></div>
+<script src="js/main.js" defer></script>
+</body>
+</html>

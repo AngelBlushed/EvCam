@@ -1,0 +1,21 @@
+# dependencies and build output
+node_modules/
+dist/
+android/build/
+native/vcam/obj/
+resources/vcam/*/*.lib
+resources/vcam/*/*.exp
+resources/vcam/*/*.pdb
+
+# the Android signing key stays private: it is created by "npm run apk" on first build
+android/*.keystore
+*.jks
+
+# logs and local test profiles
+*.log
+evcam-test-*/
+.claude/
+
+# OS / editor noise
+Thumbs.db
+.DS_Store

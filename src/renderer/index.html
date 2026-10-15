@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob: mediastream:; connect-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EvCam</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <img src="assets/logo.svg" alt="" width="26" height="26">
+        <span class="name">EvCam</span>
+        <span class="tag">Gratuit</span>
+      </div>
+      <div class="status-pill" id="statusPill" data-state="idle">
+        <span class="dot"></span><span id="statusLabel">En attente du téléphone</span>
+      </div>
+      <div class="top-spacer"></div>
+    </header>
+
+    <main class="layout">
+      <!-- ============ STAGE ============ -->
+      <section class="stage">
+        <div class="preview-card" id="previewCard" data-mode="empty">
+          <canvas id="preview"></canvas>
+
+          <div class="empty" id="emptyState">
+            <div class="qr-wrap">
+              <div class="qr-glow"></div>
+              <div class="qr" id="qrBox"></div>
+            </div>
+            <div class="pair">
+              <h2>Connectez votre téléphone</h2>
+              <ol class="steps">
+                <li><span>1</span><p>Mettez le téléphone sur le <b>même Wi-Fi</b> que ce PC.</p></li>
+                <li><span>2</span><p><b>Scannez</b> le QR code avec l’appareil photo.</p></li>
+                <li><span>3</span><p>Autorisez caméra et micro, puis touchez <b>Démarrer</b>.</p></li>
+              </ol>
+              <div class="url-row">
+                <code id="urlText">…</code>
+                <button class="icon-btn" id="btnCopy" title="Copier l’adresse" type="button"><i data-ic="copy"></i></button>
+              </div>
+              <p class="code-line">Code d’appairage : <b id="codeText">—</b></p>
+              <p class="note"><i data-ic="shield"></i><span>Un avertissement du navigateur est normal (certificat local) : <b>Avancé</b> puis <b>Continuer</b>. Rien ne quitte votre réseau.</span></p>
+            </div>
+          </div>
+
+          <div class="overlay" id="liveOverlay">
+            <div class="chips">
+              <span class="chip live"><span class="rec"></span><span id="chipDevice">Téléphone</span></span>
+              <span class="chip" id="chipRes">—</span>
+              <span class="spacer"></span>
+              <span class="chip warn" id="chipStall"><i data-ic="alert"></i>Flux en pause : réveillez le téléphone</span>
+              <span class="chip standby" id="chipStandby"><i data-ic="battery"></i><span id="chipStandbyText">Caméra désactivée · micro seul</span></span>
+              <span class="chip use" id="chipUse"><i data-ic="video"></i>Utilisée par une application</span>
+            </div>
+            <div class="controls" id="controls">
+              <button class="ctl" id="ctlCam" type="button" title="Désactiver la caméra (micro seul)"><i data-ic="video"></i></button>
+              <button class="ctl" id="ctlFlip" type="button" title="Changer de caméra du téléphone"><i data-ic="switch"></i></button>
+              <button class="ctl" id="ctlRotate" type="button" title="Pivoter l’image"><i data-ic="rotate"></i></button>
+              <button class="ctl" id="ctlMirror" type="button" title="Effet miroir"><i data-ic="mirror"></i></button>
+              <button class="ctl" id="ctlFit" type="button" title="Cadrage : ajuster / remplir"><i data-ic="fit"></i></button>
+              <button class="ctl" id="ctlUltra" type="button" title="Ultra grand-angle / objectif suivant"><i data-ic="lens"></i></button>
+              <button class="ctl" id="ctlTorch" type="button" title="Lampe torche du téléphone"><i data-ic="flash"></i></button>
+              <button class="ctl" id="ctlMute" type="button" title="Couper le micro du téléphone"><i data-ic="mic"></i></button>
+              <span class="sep"></span>
+              <button class="ctl danger" id="ctlDisconnect" type="button" title="Déconnecter le téléphone"><i data-ic="power"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="metrics" id="metrics">
+          <div class="tile">
+            <label>Latence</label>
+            <strong id="mLatency">—</strong>
+            <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"><path id="sparkLat" d=""/></svg>
+          </div>
+          <div class="tile">
+            <label>Débit</label>
+            <strong id="mBitrate">—</strong>
+            <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"><path id="sparkBit" d=""/></svg>
+          </div>
+          <div class="tile">
+            <label>Image reçue</label>
+            <strong id="mRes">—</strong>
+            <small id="mCodec">—</small>
+          </div>
+          <div class="tile">
+            <label>Téléphone</label>
+            <strong id="mPhone">—</strong>
+            <small id="mBattery">—</small>
+          </div>
+        </div>
+
+        <div class="checks" id="checks"></div>
+      </section>
+
+      <!-- ============ PANEL ============ -->
+      <aside class="panel">
+        <nav class="tabs" id="tabs" role="tablist">
+          <button type="button" role="tab" data-tab="camera" aria-selected="true"><i data-ic="video"></i>Caméra</button>
+          <button type="button" role="tab" data-tab="audio" aria-selected="false"><i data-ic="mic"></i>Micro</button>
+          <button type="button" role="tab" data-tab="settings" aria-selected="false"><i data-ic="sliders"></i>Réglages</button>
+          <span class="tab-ind" id="tabInd"></span>
+        </nav>
+
+        <div class="tab-body">
+          <!-- CAMERA -->
+          <section class="tabpane" data-pane="camera">
+            <div class="card">
+              <div class="card-head">
+                <div class="ico g1"><i data-ic="video"></i></div>
+                <div class="head-text"><h3>Caméra virtuelle</h3><p id="vcamSub">Visible sous le nom « EvCam »</p></div>
+                <span class="badge" id="vcamBadge" data-tone="muted">…</span>
+              </div>
+              <div class="field row">
+                <div><label>Vidéo du téléphone</label><small>Désactivez-la pour n’utiliser que le micro : la caméra du téléphone s’éteint (économie de batterie). Réactivez-la quand vous voulez.</small></div>
+                <label class="switch"><input type="checkbox" data-setting="camera.enabled"><span></span></label>
+              </div>
+              <div class="field">
+                <label>Qualité</label>
+                <div class="seg" data-setting="camera.quality">
+                  <button type="button" data-value="480p">480p</button>
+                  <button type="button" data-value="720p">720p</button>
+                  <button type="button" data-value="1080p">1080p</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>Fluidité <em>images par seconde</em></label>
+                <div class="seg" data-setting="camera.fps" data-type="number">
+                  <button type="button" data-value="24">24</button>
+                  <button type="button" data-value="30">30</button>
+                  <button type="button" data-value="60">60</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>Cadrage</label>
+                <div class="seg" data-setting="camera.fit">
+                  <button type="button" data-value="contain">Ajuster</button>
+                  <button type="button" data-value="cover">Remplir</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>Orientation</label>
+                <div class="seg" data-setting="camera.rotation" data-type="number">
+                  <button type="button" data-value="0">0°</button>
+                  <button type="button" data-value="90">90°</button>
+                  <button type="button" data-value="180">180°</button>
+                  <button type="button" data-value="270">270°</button>
+                </div>
+              </div>
+              <div class="field row">
+                <label>Effet miroir</label>
+                <label class="switch"><input type="checkbox" data-setting="camera.mirror"><span></span></label>
+              </div>
+              <div class="field">
+                <label>Caméra du téléphone</label>
+                <div class="seg" data-setting="phone.facing">
+                  <button type="button" data-value="user">Avant</button>
+                  <button type="button" data-value="environment">Arrière</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" id="lensCard">
+              <div class="card-head">
+                <div class="ico g3"><i data-ic="lens"></i></div>
+                <div class="head-text"><h3>Objectif, dézoom et flash</h3><p id="lensSub">Connectez le téléphone pour régler l’objectif</p></div>
+              </div>
+              <div class="field" id="zoomField">
+                <label>Zoom <em id="zoomVal"></em></label>
+                <div class="seg" id="zoomSeg"></div>
+                <small id="zoomHint"></small>
+              </div>
+              <div class="field slider">
+                <label>Dézoom numérique <em id="dezoomVal">0 %</em></label>
+                <input type="range" min="0" max="90" step="1" data-setting="camera.dezoom">
+                <small>Réduit l’image dans le cadre et remplit le tour. Ne montre pas plus de décor que l’objectif ne voit.</small>
+              </div>
+              <div class="field">
+                <label>Fond autour de l’image</label>
+                <div class="seg" data-setting="camera.dezoomBg">
+                  <button type="button" data-value="blur">Flou</button>
+                  <button type="button" data-value="mirror">Miroir</button>
+                  <button type="button" data-value="black">Noir</button>
+                </div>
+              </div>
+              <div class="field row">
+                <div><label>Champ large 4:3</label><small>Capture tout le capteur : plus de décor en hauteur qu’en 16:9. L’image est affichée en entier.</small></div>
+                <label class="switch"><input type="checkbox" data-setting="camera.wide"><span></span></label>
+              </div>
+              <div class="field row stack">
+                <div class="btn-row">
+                  <button class="btn" id="btnMaxWide" type="button">Dézoom maximal</button>
+                  <button class="btn" id="btnResetWide" type="button">Réinitialiser</button>
+                </div>
+              </div>
+              <div class="field" id="lensField" hidden>
+                <label>Objectif</label>
+                <select class="select" id="lensSelect"></select>
+              </div>
+              <div class="field row">
+                <div><label>Flash / lumière</label><small id="torchHint">Lampe du téléphone (caméra arrière).</small></div>
+                <label class="switch"><input type="checkbox" id="torchSwitch"><span></span></label>
+              </div>
+            </div>
+
+            <div class="card" id="powerCard">
+              <div class="card-head">
+                <div class="ico g3"><i data-ic="battery"></i></div>
+                <div class="head-text"><h3>Batterie du téléphone</h3><p id="powerSub">Réduit la consommation du téléphone</p></div>
+                <span class="badge" id="powerBadge" data-tone="muted">Normal</span>
+              </div>
+              <div class="field row">
+                <div><label>Mode économie</label><small>720p maximum, 24 images/s, débit réduit, écran du téléphone noir automatiquement.</small></div>
+                <label class="switch"><input type="checkbox" data-setting="power.eco"><span></span></label>
+              </div>
+              <div class="field">
+                <label>Encodage vidéo <em>consommation</em></label>
+                <div class="seg" data-setting="power.codec">
+                  <button type="button" data-value="h264">H.264 matériel</button>
+                  <button type="button" data-value="vp8">VP8 compatible</button>
+                </div>
+                <small>H.264 utilise la puce vidéo du téléphone : bien moins de batterie. Repasse seul en VP8 si besoin.</small>
+              </div>
+            </div>
+
+            <div class="card" id="discordCard">
+              <div class="card-head">
+                <div class="ico g1"><i data-ic="monitor"></i></div>
+                <div class="head-text"><h3>Discord, Zoom, Teams…</h3><p id="discordSub">Forcer la détection d’EvCam</p></div>
+                <span class="badge" id="discordBadge" data-tone="muted">—</span>
+              </div>
+              <div class="field">
+                <small>Dans Discord : <b>Paramètres → Voix et vidéo</b> → Caméra : <b>EvCam</b> · Microphone : <b id="discordMicName">CABLE Output</b>.<br>Discord ne relit la liste de ses caméras qu’au démarrage : s’il est ouvert depuis avant EvCam, redémarrez-le.</small>
+              </div>
+              <div class="field row stack">
+                <div class="btn-row">
+                  <button class="btn js-force" type="button">Forcer la détection</button>
+                  <button class="btn" id="btnDiscord" type="button" hidden>Redémarrer Discord</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="callout" id="vcamCallout" hidden>
+              <i data-ic="alert"></i>
+              <div><b id="vcamCalloutTitle">Caméra virtuelle non installée</b><p id="vcamCalloutText">EvCam ne peut pas apparaître dans vos applications.</p></div>
+              <button class="btn" id="btnVcamFix" type="button">Réparer</button>
+            </div>
+
+            <div class="card tip">
+              <h3>Comment l’utiliser</h3>
+              <p>Dans Zoom, Teams, Discord, OBS, Meet… ouvrez les réglages vidéo et choisissez la caméra <b>EvCam</b>. Si l’application était déjà ouverte, relancez-la une fois.</p>
+            </div>
+          </section>
+
+          <!-- AUDIO -->
+          <section class="tabpane" data-pane="audio" hidden>
+            <div class="card">
+              <div class="card-head">
+                <div class="ico g2"><i data-ic="mic"></i></div>
+                <div class="head-text"><h3>Micro du téléphone</h3><p id="micSub">En attente du téléphone</p></div>
+                <span class="badge" id="micBadge" data-tone="muted">—</span>
+              </div>
+              <div class="meter">
+                <div class="meter-bar"><i id="meterFill"></i><b id="meterPeak"></b></div>
+                <span id="meterDb">—</span>
+              </div>
+              <div class="field slider">
+                <label>Volume <em id="gainVal">100 %</em></label>
+                <input type="range" min="0" max="200" step="1" data-setting="audio.gain" data-scale="100">
+              </div>
+              <div class="field slider">
+                <label>Décalage audio <em id="delayVal">0 ms</em></label>
+                <input type="range" min="0" max="500" step="10" data-setting="audio.delayMs">
+                <small>Retarde le son pour le caler sur l’image (synchro des lèvres).</small>
+              </div>
+              <div class="field row">
+                <div><label>Réduction du bruit</label><small>Filtre appliqué par le téléphone</small></div>
+                <label class="switch"><input type="checkbox" data-setting="phone.noiseSuppression"><span></span></label>
+              </div>
+              <div class="field row">
+                <div><label>Couper le micro</label><small>Le téléphone n’envoie plus de son</small></div>
+                <label class="switch"><input type="checkbox" id="muteSwitch"><span></span></label>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div class="ico"><i data-ic="speaker"></i></div>
+                <div class="head-text"><h3>Micro virtuel</h3><p>Devient un micro pour vos applications</p></div>
+                <span class="badge" id="outBadge" data-tone="muted">—</span>
+              </div>
+              <div class="field">
+                <select class="select" id="outSelect" aria-label="Périphérique de sortie du micro virtuel"></select>
+                <small id="outHint"></small>
+              </div>
+              <div class="callout" id="cableCallout" hidden>
+                <i data-ic="alert"></i>
+                <div><b>Aucun micro virtuel sur ce PC</b><p>EvCam peut l’installer pour vous : un clic, une autorisation administrateur de Windows, et « EvCam Micro » apparaît dans Discord, Zoom, OBS… (pilote audio gratuit VB-CABLE, ≈ 1,3 Mo, signature vérifiée).</p></div>
+                <div class="btn-row"><button class="btn primary" id="btnMicInstall" type="button">Installer le micro virtuel</button><button class="btn" id="btnCable" type="button">Site du pilote <i data-ic="external"></i></button></div>
+              </div>
+              <div class="field row stack" id="micNameRow">
+                <div><label>Nom du micro dans vos applications</label><small id="micDefaultText">Lecture…</small><small id="micInstallStatus" hidden></small></div>
+                <div class="btn-row">
+                  <button class="btn" id="btnMicCreate" type="button">Créer le micro « EvCam Micro »</button>
+                  <button class="btn" id="btnMicRevert" type="button" hidden>Rétablir le nom d’origine</button>
+                </div>
+              </div>
+              <div class="field row stack" id="prevMicRow" hidden>
+                <div><label>Votre micro Windows par défaut</label><small>Une ancienne version d’EvCam l’avait remplacé : rétablissez l’ancien.</small></div>
+                <div class="btn-row"><button class="btn" id="btnMicRestore" type="button">Rétablir mon micro précédent</button></div>
+              </div>
+              <div class="field row">
+                <div><label>Écouter sur ce PC</label><small>Retour dans vos haut-parleurs ou casque</small></div>
+                <label class="switch"><input type="checkbox" data-setting="audio.monitor"><span></span></label>
+              </div>
+            </div>
+          </section>
+
+          <!-- SETTINGS -->
+          <section class="tabpane" data-pane="settings" hidden>
+            <div class="card">
+              <div class="card-head">
+                <div class="ico g3"><i data-ic="power"></i></div>
+                <div class="head-text"><h3>Démarrage</h3><p>Soyez prêt dès l’ouverture de Windows</p></div>
+              </div>
+              <div class="field row">
+                <div><label>Lancer EvCam au démarrage de Windows</label><small>Démarre discrètement : la caméra est déjà là quand vous ouvrez Zoom ou Teams.</small></div>
+                <label class="switch"><input type="checkbox" data-setting="autoStart"><span></span></label>
+              </div>
+              <div class="field row">
+                <div><label>Démarrer réduit</label><small>Sans ouvrir la fenêtre au lancement automatique</small></div>
+                <label class="switch"><input type="checkbox" data-setting="startMinimized"><span></span></label>
+              </div>
+              <div class="field">
+                <label>Quand je clique sur la croix</label>
+                <div class="seg" data-setting="closeAction">
+                  <button type="button" data-value="ask">Demander</button>
+                  <button type="button" data-value="tray">Réduire</button>
+                  <button type="button" data-value="quit">Fermer</button>
+                </div>
+                <small>« Demander » propose de réduire EvCam près de l’horloge ou de le fermer complètement.</small>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div class="ico"><i data-ic="wifi"></i></div>
+                <div class="head-text"><h3>Connexion</h3><p>Réseau local, port et sécurité</p></div>
+              </div>
+              <div class="field">
+                <label>Réseau utilisé pour le QR code</label>
+                <select class="select" id="ipSelect"></select>
+              </div>
+              <div class="field">
+                <label>Port</label>
+                <div class="inline">
+                  <input class="input" type="number" id="portInput" min="1024" max="65535" step="1">
+                  <button class="btn" id="btnPort" type="button">Appliquer</button>
+                </div>
+              </div>
+              <div class="field row">
+                <div><label>Pare-feu Windows</label><small id="fwText">Vérification…</small></div>
+                <button class="btn" id="btnFirewall" type="button">Autoriser</button>
+              </div>
+              <div class="field row">
+                <div><label>Code d’appairage</label><small>Régénérer invalide les anciens QR codes</small></div>
+                <button class="btn" id="btnToken" type="button">Régénérer</button>
+              </div>
+            </div>
+
+            <div class="card" id="apkCard">
+              <div class="card-head">
+                <div class="ico g2"><i data-ic="phone"></i></div>
+                <div class="head-text"><h3>Application Android</h3><p>Facultative, plus confortable que le navigateur</p></div>
+              </div>
+              <div class="apk">
+                <div class="apk-qr" id="apkQr"></div>
+                <div class="apk-text">
+                  <p>Scannez ce QR code avec le téléphone pour télécharger <b>EvCam.apk</b>, ouvrez le fichier puis autorisez l’installation depuis cette source.</p>
+                  <small>Ensuite : plus d’avertissement de sécurité, scan du QR code dans l’appli et reconnexion automatique.</small>
+                </div>
+              </div>
+              <div class="field row stack">
+                <div><label>Fichier d’installation</label><small id="apkHint">EvCam.apk</small></div>
+                <div class="btn-row">
+                  <button class="btn" id="btnApkCopy" type="button">Copier le lien</button>
+                  <button class="btn" id="btnApkReveal" type="button">Afficher</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div class="ico"><i data-ic="wrench"></i></div>
+                <div class="head-text"><h3>Diagnostic</h3><p>Vérifiez que tout fonctionne</p></div>
+              </div>
+              <div class="field row">
+                <div><label>Mire de test</label><small>Envoie une image de test à la caméra virtuelle, sans téléphone</small></div>
+                <label class="switch"><input type="checkbox" id="testSwitch"><span></span></label>
+              </div>
+              <div class="field row">
+                <div><label>Forcer la détection</label><small>Réenregistre la caméra (64 et 32 bits) et demande aux applications d’actualiser leurs périphériques.</small></div>
+                <button class="btn js-force" type="button">Forcer</button>
+              </div>
+              <div class="field row">
+                <div><label>Réparer la caméra virtuelle</label><small id="repairText">Ré-enregistre « EvCam » auprès de Windows</small></div>
+                <button class="btn" id="btnRepair" type="button">Réparer</button>
+              </div>
+            </div>
+
+            <footer class="about">
+              <b>EvCam</b> <span id="verText"></span> · gratuit · licence MIT<br>
+              Caméra virtuelle basée sur Softcam (MIT) · Inter (OFL)
+            </footer>
+          </section>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div class="modal" id="welcome" hidden role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+    <div class="modal-card">
+      <img class="modal-logo" src="assets/logo.svg" alt="" width="76" height="76">
+      <h2 id="welcomeTitle">Bienvenue sur EvCam</h2>
+      <p class="lead">Votre téléphone devient la webcam et le micro de votre PC, gratuitement.</p>
+      <ul class="bullets">
+        <li><i data-ic="video"></i><div><b>Caméra virtuelle « EvCam »</b><span>À choisir dans Zoom, Teams, Discord, OBS, Meet…</span></div></li>
+        <li><i data-ic="mic"></i><div><b>Micro du téléphone</b><span>Devient le micro « EvCam Micro » (pilote gratuit VB-CABLE, installé pour vous).</span></div></li>
+        <li><i data-ic="wifi"></i><div><b>Sans fil, rien à installer sur le téléphone</b><span>Scannez simplement le QR code avec l’appareil photo.</span></div></li>
+      </ul>
+      <div class="opt">
+        <div><b>Lancer EvCam au démarrage de Windows</b><small>Recommandé : la caméra est prête dès que vous ouvrez vos applications.</small></div>
+        <label class="switch"><input type="checkbox" id="welcomeAuto" checked><span></span></label>
+      </div>
+      <button class="btn primary big" id="welcomeGo" type="button">C’est parti</button>
+    </div>
+  </div>
+
+  <div class="modal close-modal" id="closeAsk" hidden role="dialog" aria-modal="true" aria-labelledby="closeAskTitle">
+    <div class="close-card">
+      <h2 id="closeAskTitle">Fermer EvCam&nbsp;?</h2>
+      <p id="closeAskText">Réduit, EvCam continue près de l’horloge.</p>
+      <div class="close-actions">
+        <button class="btn-ghost" id="closeAskTray" type="button">Réduire</button>
+        <button class="btn-close" id="closeAskQuit" type="button">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

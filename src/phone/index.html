@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#07080f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="EvCam">
+  <title>EvCam</title>
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="phone.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <main id="app" data-state="idle">
+
+    <!-- Accueil -->
+    <section class="screen idle" aria-label="Accueil">
+      <div class="idle-inner">
+        <div class="brand">
+          <img class="logo" src="logo.svg" alt="" width="96" height="96">
+          <h1>EvCam</h1>
+          <p class="tagline">Votre téléphone devient la webcam<br>et le micro de votre PC.</p>
+        </div>
+
+        <div class="card link" id="linkCard" data-ok="unknown">
+          <span class="dot"></span>
+          <div>
+            <strong id="linkTitle">Recherche de votre PC…</strong>
+            <small id="linkSub">Même réseau Wi-Fi requis</small>
+          </div>
+        </div>
+
+        <div class="card options">
+          <div class="row">
+            <span class="label">Caméra</span>
+            <div class="seg" id="facingSeg" role="radiogroup" aria-label="Caméra">
+              <button type="button" role="radio" data-facing="user" aria-checked="true">Avant</button>
+              <button type="button" role="radio" data-facing="environment" aria-checked="false">Arrière</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="label">Envoyer le micro</span>
+            <label class="switch"><input type="checkbox" id="micToggle" checked><span></span></label>
+          </div>
+        </div>
+
+        <button class="primary" id="startBtn" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5A2.5 2.5 0 0 1 7.5 5h5A2.5 2.5 0 0 1 15 7.5v1.2l3.2-2.1c.7-.5 1.8 0 1.8.9v9c0 .9-1.1 1.4-1.8.9L15 15.3v1.2a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 5 16.5z"/></svg>
+          Démarrer la caméra
+        </button>
+        <p class="hint" id="idleMsg" hidden></p>
+
+        <button class="ghost change-pc" type="button" hidden>Changer de PC</button>
+
+        <details class="tips">
+          <summary>Conseils</summary>
+          <ul>
+            <li>Gardez cette page ouverte et l’écran allumé : le navigateur coupe la caméra en arrière-plan.</li>
+            <li>Posez le téléphone en <b>mode paysage</b> pour un cadre 16:9.</li>
+            <li>Un avertissement de sécurité du navigateur est normal : le PC utilise un certificat local. Appuyez sur <b>Avancé</b> puis <b>Continuer</b>.</li>
+          </ul>
+        </details>
+      </div>
+    </section>
+
+    <!-- Démarrage / erreur -->
+    <section class="screen status" aria-live="polite">
+      <div class="status-inner">
+        <div class="spinner" id="spinner"></div>
+        <svg class="err-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg>
+        <h2 id="statusTitle">Connexion…</h2>
+        <p id="statusText"></p>
+        <button class="ghost" id="retryBtn" type="button" hidden>Réessayer</button>
+        <button class="ghost change-pc" type="button" hidden>Changer de PC</button>
+      </div>
+    </section>
+
+    <!-- En direct -->
+    <section class="screen live" aria-label="En direct">
+      <video id="preview" playsinline muted autoplay></video>
+      <div class="shade top"></div>
+      <div class="shade bottom"></div>
+
+      <header class="live-top">
+        <div class="pill" id="livePill"><span class="rec"></span><b id="liveLabel">EN DIRECT</b><em id="liveInfo"></em></div>
+        <div class="pill subtle" id="batPill" hidden></div>
+      </header>
+
+      <footer class="live-bar">
+        <button class="round" id="flipBtn" type="button" aria-label="Changer de caméra">
+          <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5"/></svg>
+        </button>
+        <button class="round" id="camBtn" type="button" aria-label="Caméra activée / désactivée (micro seul)" aria-pressed="false">
+          <svg class="on" viewBox="0 0 24 24"><rect x="3" y="6" width="12.5" height="12" rx="3"/><path d="m15.5 10.5 4.9-2.9a.7.7 0 0 1 1.1.6v7.6a.7.7 0 0 1-1.1.6l-4.9-2.9"/></svg>
+          <svg class="off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10 6h2a3 3 0 0 1 3 3v1.5l5-2.9a.7.7 0 0 1 1.1.6v7.6M15 15v.5a2.5 2.5 0 0 1-2.5 2.5H6a3 3 0 0 1-3-3V9a3 3 0 0 1 1.2-2.4"/></svg>
+        </button>
+        <button class="round" id="lensBtn" type="button" aria-label="Objectif et zoom (ultra grand-angle)">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2"/></svg>
+        </button>
+        <button class="round" id="micBtn" type="button" aria-label="Couper le micro" aria-pressed="false">
+          <svg class="on" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          <svg class="off" viewBox="0 0 24 24"><path d="M3 3l18 18M9 9v2a3 3 0 0 0 5 2.2M15 9.3V6a3 3 0 0 0-5.7-1.3M5 11a7 7 0 0 0 11.2 5.6M19 11a7 7 0 0 1-.6 2.8M12 18v3"/></svg>
+        </button>
+        <button class="round" id="torchBtn" type="button" aria-label="Flash / lumière" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><path d="M7 3h10l-1.5 6h-7zM8.5 9h7v3.5a3.5 3.5 0 0 1-7 0zM12 16v5"/></svg>
+        </button>
+        <button class="round" id="darkBtn" type="button" aria-label="Écran noir (économie de batterie)">
+          <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+        </button>
+        <button class="round stop" id="stopBtn" type="button" aria-label="Arrêter">
+          <svg viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></svg>
+        </button>
+      </footer>
+    </section>
+
+    <div id="sheet" hidden>
+      <div class="sheet-card">
+        <header><b>Objectif</b><button id="sheetClose" type="button" aria-label="Fermer">✕</button></header>
+        <div class="pills" id="sheetZoom"></div>
+        <div class="lens-list" id="sheetLenses"></div>
+        <p class="sheet-note" id="sheetNote"></p>
+      </div>
+    </div>
+
+    <div id="screenLight" hidden><p>Lumière écran · touchez pour éteindre</p></div>
+
+    <div id="blackout" hidden>
+      <p>Écran noir · la caméra continue<br><small>Touchez l’écran pour revenir</small></p>
+    </div>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </main>
+
+  <script src="phone.js"></script>
+</body>
+</html>

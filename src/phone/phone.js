@@ -1,0 +1,1024 @@
+/* EvCam phone client: streams camera + microphone to the EvCam desktop app over WebRTC. */
+(() => {
+  'use strict';
+
+  const $ = (sel) => document.querySelector(sel);
+  const app = $('#app');
+  const el = {
+    preview: $('#preview'),
+    startBtn: $('#startBtn'),
+    idleMsg: $('#idleMsg'),
+    linkCard: $('#linkCard'),
+    linkTitle: $('#linkTitle'),
+    linkSub: $('#linkSub'),
+    facingSeg: $('#facingSeg'),
+    micToggle: $('#micToggle'),
+    statusTitle: $('#statusTitle'),
+    statusText: $('#statusText'),
+    retryBtn: $('#retryBtn'),
+    livePill: $('#livePill'),
+    liveLabel: $('#liveLabel'),
+    liveInfo: $('#liveInfo'),
+    batPill: $('#batPill'),
+    flipBtn: $('#flipBtn'),
+    camBtn: $('#camBtn'),
+    lensBtn: $('#lensBtn'),
+    sheet: $('#sheet'),
+    sheetZoom: $('#sheetZoom'),
+    sheetLenses: $('#sheetLenses'),
+    sheetNote: $('#sheetNote'),
+    sheetClose: $('#sheetClose'),
+    screenLight: $('#screenLight'),
+    micBtn: $('#micBtn'),
+    torchBtn: $('#torchBtn'),
+    darkBtn: $('#darkBtn'),
+    stopBtn: $('#stopBtn'),
+    blackout: $('#blackout'),
+    toast: $('#toast')
+  };
+
+  const params = new URLSearchParams(location.search);
+  const DEMO = params.has('demo');
+  // Running inside the EvCam Android app (native bridge) or opened with ?app=1
+  const NATIVE = window.EvCamNative || null;
+  const APP = !!NATIVE || params.has('app');
+  if (APP) document.body.classList.add('app');
+  const dbg = (...args) => { if (params.has('debug')) console.log('[evcam]', ...args); };
+  const native = (fn) => { try { if (NATIVE) fn(NATIVE); } catch { /* bridge unavailable */ } };
+
+  const state = {
+    token: loadToken(),
+    device: 'Téléphone',
+    stream: null,
+    pc: null,
+    dc: null,
+    facing: 'user',
+    wantMic: true,
+    micMuted: false,
+    torch: false,
+    torchSupported: false,
+    torchMode: 'torch',          // 'torch' (rear LED) or 'screen' (front camera: the screen becomes a light)
+    screenLight: false,
+    standby: false,              // camera switched off (microphone only), from the PC or from this phone
+    standbyReason: '',           // 'user' (chosen) | 'sleep' (screen off / app in the background: the phone stopped the camera)
+    camWanted: true,             // the camera is wanted (not switched off by the user): brought back after a sleep
+    camOff: false,               // the PC asked for microphone-only mode before the stream started
+    eco: false,
+    lensId: '',
+    lenses: [],
+    zoom: { supported: false, min: 1, max: 1, step: 0.1, value: 1 },
+    videoSender: null,
+    running: false,
+    userStopped: false,
+    reconnecting: false,
+    attempts: 0,
+    wake: null,
+    dropTimer: 0,
+    statsTimer: 0,
+    lastStats: null,
+    battery: null,
+    demoTimer: 0,
+    autoStarted: false,
+    cfg: { width: 1280, height: 720, fps: 30, bitrate: 3300000, noiseSuppression: true, codec: 'h264' }
+  };
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // ---------------------------------------------------------------------------
+  // helpers
+  // ---------------------------------------------------------------------------
+
+  function loadToken() {
+    let token = new URLSearchParams(location.search).get('t') || '';
+    try {
+      if (token) localStorage.setItem('evcam.t', token);
+      else token = localStorage.getItem('evcam.t') || '';
+    } catch { /* storage unavailable */ }
+    return token;
+  }
+
+  function setScreen(name, title, text) {
+    app.dataset.state = name;
+    if (title !== undefined) el.statusTitle.textContent = title;
+    if (text !== undefined) el.statusText.textContent = text;
+    el.retryBtn.hidden = name !== 'error';
+  }
+
+  let toastTimer = 0;
+  function toast(message, ms = 2600) {
+    el.toast.textContent = message;
+    el.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.toast.classList.remove('show'), ms);
+  }
+
+  function describeError(e) {
+    switch (e && e.name) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        return 'Accès refusé.\nAutorisez la caméra et le micro pour cette page dans les réglages du navigateur, puis réessayez.';
+      case 'NotFoundError':
+      case 'DevicesNotFoundError':
+        return 'Aucune caméra détectée sur ce téléphone.';
+      case 'NotReadableError':
+      case 'TrackStartError':
+        return 'La caméra est utilisée par une autre application.\nFermez-la puis réessayez.';
+      case 'OverconstrainedError':
+        return 'Cette caméra ne prend pas en charge la qualité demandée.';
+      default:
+        return (e && e.message) || 'Une erreur est survenue.';
+    }
+  }
+
+  function fail(message, fatal = false) {
+    teardown();
+    state.userStopped = true;
+    if (fatal) native((n) => n.home('token'));
+    setScreen('error', fatal ? 'Connexion refusée' : 'Oups…', message);
+  }
+
+  async function deviceLabel() {
+    try {
+      const hv = await navigator.userAgentData?.getHighEntropyValues?.(['model']);
+      if (hv && hv.model) return hv.model;
+    } catch { /* not available */ }
+    const ua = navigator.userAgent;
+    if (/iPhone/.test(ua)) return 'iPhone';
+    if (/iPad/.test(ua)) return 'iPad';
+    if (/Android/.test(ua)) return 'Téléphone Android';
+    return 'Navigateur';
+  }
+
+  // ---------------------------------------------------------------------------
+  // media
+  // ---------------------------------------------------------------------------
+
+  const videoTrack = () => (state.stream ? state.stream.getVideoTracks()[0] : null);
+  const audioTrack = () => (state.stream ? state.stream.getAudioTracks()[0] : null);
+
+  function videoConstraints(facing, deviceId) {
+    const { width, height, fps } = state.cfg;
+    const base = { width: { ideal: width }, height: { ideal: height }, aspectRatio: { ideal: width / height }, frameRate: { ideal: fps } };
+    return deviceId ? { ...base, deviceId: { exact: deviceId } } : { ...base, facingMode: { ideal: facing } };
+  }
+
+  function audioConstraints() {
+    return {
+      echoCancellation: false,
+      noiseSuppression: state.cfg.noiseSuppression,
+      autoGainControl: true,
+      channelCount: 1
+    };
+  }
+
+  async function acquire(facing, { videoOnly = false, audioOnly = false, deviceId = '' } = {}) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw Object.assign(new Error('Ce navigateur ne permet pas l’accès à la caméra sur cette page.\nOuvrez l’adresse en https://.'), { name: 'SecurityError' });
+    }
+    const wantVideo = !audioOnly;
+    const wantAudio = audioOnly || (state.wantMic && !videoOnly);
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: wantVideo ? videoConstraints(facing, deviceId) : false,
+        audio: wantAudio ? audioConstraints() : false
+      });
+    } catch (err) {
+      if (wantVideo && wantAudio && err.name !== 'NotReadableError') {
+        // Maybe only the microphone is the problem: continue with video alone.
+        const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints(facing, deviceId), audio: false });
+        toast('Micro indisponible : image seule.');
+        return stream;
+      }
+      throw err;
+    }
+  }
+
+  /** Synthetic source (`?demo=1`): lets you test the whole chain without a camera. */
+  function demoStream() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 720;
+    const g = canvas.getContext('2d');
+    const bars = ['#ffffff', '#ffd400', '#00e5ff', '#34d058', '#ff4fd8', '#ff3b30', '#2f5bff'];
+    const t0 = performance.now();
+    let frame = 0;
+    const draw = () => {
+      const t = (performance.now() - t0) / 1000;
+      g.fillStyle = '#10121f';
+      g.fillRect(0, 0, 1280, 720);
+      bars.forEach((c, i) => { g.fillStyle = c; g.fillRect(i * (1280 / 7), 0, 1280 / 7 + 1, 300); });
+      const grad = g.createLinearGradient(0, 300, 1280, 720);
+      grad.addColorStop(0, '#2b1b6e'); grad.addColorStop(1, '#0a6fa3');
+      g.fillStyle = grad; g.fillRect(0, 300, 1280, 420);
+      g.fillStyle = '#fff';
+      g.beginPath(); g.arc(640 + Math.cos(t * 2) * 420, 510 + Math.sin(t * 3) * 110, 56, 0, Math.PI * 2); g.fill();
+      g.font = '700 54px sans-serif'; g.textBaseline = 'top';
+      g.fillText(`EvCam DEMO  ${t.toFixed(2)} s`, 40, 330);
+      g.font = '500 30px sans-serif'; g.fillStyle = 'rgba(255,255,255,.75)';
+      g.fillText(`image ${frame++}`, 40, 410);
+    };
+    draw();
+    state.demoTimer = setInterval(draw, 1000 / 30);
+    const video = canvas.captureStream(30);
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    ac.resume();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    gain.gain.value = 0.08;
+    const dest = ac.createMediaStreamDestination();
+    osc.frequency.value = 440;
+    osc.connect(gain).connect(dest);
+    osc.start();
+    return new MediaStream([...video.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+  }
+
+  function attachPreview() {
+    const vt = videoTrack();
+    el.preview.srcObject = vt ? new MediaStream([vt]) : null; // video only: never play our own mic
+    el.preview.classList.toggle('mirror', state.facing === 'user' && !DEMO);
+    el.preview.play().catch(() => {});
+  }
+
+  const BACK = /back|rear|arri|environment/i;
+  const FRONT = /front|avant|user|selfie/i;
+
+  async function refreshLenses() {
+    try {
+      const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+      state.lenses = devices.map((d) => ({ id: d.deviceId, label: d.label || '', facing: BACK.test(d.label) ? 'environment' : FRONT.test(d.label) ? 'user' : '' }));
+    } catch {
+      state.lenses = [];
+    }
+  }
+
+  /** Human names for the cameras the browser exposes (several back cameras on most recent phones). */
+  function friendlyLenses() {
+    let back = 0;
+    let front = 0;
+    let other = 0;
+    return state.lenses.map((l) => {
+      let name;
+      if (/ultra|wide|0[.,]5/i.test(l.label)) name = 'Ultra grand-angle';
+      else if (/tele|zoom/i.test(l.label)) name = 'Téléobjectif';
+      else if (l.facing === 'user') name = ++front > 1 ? `Caméra avant ${front}` : 'Caméra avant';
+      else if (l.facing === 'environment') name = `Caméra arrière ${++back}`;
+      else name = `Caméra ${++other}`;
+      return { id: l.id, name, facing: l.facing, current: l.id === state.lensId };
+    });
+  }
+
+  // Chrome only reports torch / zoom once the photo capabilities were requested.
+  async function detectCaps() {
+    try { await detectCapsUnsafe(); } catch (err) { dbg('detectCaps failed', err && err.message); }
+    sendState();
+  }
+
+  async function detectCapsUnsafe() {
+    const vt = videoTrack();
+    if (vt && typeof ImageCapture === 'function') {
+      try { await new ImageCapture(vt).getPhotoCapabilities(); } catch { /* not supported */ }
+    }
+    const caps = vt && vt.getCapabilities ? vt.getCapabilities() : {};
+    const settings = vt && vt.getSettings ? vt.getSettings() : {};
+    state.torchSupported = !!caps.torch;
+    if (caps.zoom && typeof caps.zoom.max === 'number') {
+      // Android reports a ratio (0.5..10); UVC-style cameras report percent (100..400): always expose ratios
+      const scale = caps.zoom.min >= 20 ? caps.zoom.min : 1;
+      state.zoom = {
+        supported: true, scale, min: caps.zoom.min / scale, max: caps.zoom.max / scale, step: (caps.zoom.step || 0.1) / scale,
+        value: (typeof settings.zoom === 'number' ? settings.zoom : caps.zoom.min) / scale
+      };
+    } else {
+      state.zoom = { supported: false, min: 1, max: 1, step: 0.1, value: 1 };
+    }
+    if (settings.deviceId) state.lensId = settings.deviceId;
+    if (settings.facingMode === 'user' || settings.facingMode === 'environment') state.facing = settings.facingMode;
+    el.torchBtn.setAttribute('aria-pressed', String(state.torch));
+    const at = audioTrack();
+    if (at) at.enabled = !state.micMuted;
+    el.micBtn.hidden = !at;
+    await refreshLenses();
+    renderSheet();
+  }
+
+  /** (Re)opens the camera: another facing, a specific lens (deviceId), or the same one after standby. */
+  async function openVideo({ facing = state.facing, deviceId = '' } = {}) {
+    if (DEMO || !state.stream) return;
+    const previous = { facing: state.facing, lensId: state.lensId };
+    if (state.screenLight) await setScreenLight(false);
+    const old = videoTrack();
+    if (old) { old.stop(); state.stream.removeTrack(old); }
+    let fresh;
+    try {
+      fresh = await acquire(facing, { videoOnly: true, deviceId });
+    } catch (err) {
+      toast(deviceId ? 'Cet objectif ne peut pas être ouvert.' : 'Impossible de changer de caméra.');
+      fresh = await acquire(previous.facing, { videoOnly: true, deviceId: previous.lensId }).catch(() => acquire(previous.facing, { videoOnly: true }));
+    }
+    const track = fresh.getVideoTracks()[0];
+    track.contentHint = 'motion';
+    state.stream.addTrack(track);
+    if (state.videoSender) await state.videoSender.replaceTrack(track).catch(() => {});
+    if (!deviceId) state.facing = facing;
+    state.torch = false;
+    attachPreview();
+    await detectCaps();
+    tuneSender();
+  }
+
+  const switchCamera = (facing) => openVideo({ facing });
+  const selectLens = (deviceId) => openVideo({ deviceId });
+
+  async function setZoom(value) {
+    const vt = videoTrack();
+    if (!vt || !state.zoom.supported) return;
+    const z = Math.min(state.zoom.max, Math.max(state.zoom.min, Number(value)));
+    try {
+      await vt.applyConstraints({ advanced: [{ zoom: z * (state.zoom.scale || 1) }] });
+      state.zoom.value = z;
+    } catch {
+      toast('Zoom indisponible sur cet objectif.');
+    }
+    renderSheet();
+    sendState();
+  }
+
+  /** The front camera has no flash: light the face with the screen instead (white screen, full brightness). */
+  async function setScreenLight(on) {
+    state.screenLight = !!on;
+    el.screenLight.hidden = !on;
+    if (on) { el.blackout.hidden = true; clearTimeout(ecoTimer); }
+    native((n) => n.setBrightness(on ? 1 : -1));
+    if (!on) scheduleEcoBlackout();
+  }
+
+  /**
+   * Flash: rear LED through the web torch constraint, then through the native Android API,
+   * and on the front camera the screen light. Always attempted, even if the browser did not report support.
+   */
+  async function setTorch(on) {
+    on = !!on;
+    if (state.standby) return;
+    if (state.facing === 'user' && !DEMO) {
+      state.torchMode = 'screen';
+      await setScreenLight(on);
+      state.torch = on;
+    } else {
+      state.torchMode = 'torch';
+      let ok = false;
+      const vt = videoTrack();
+      if (vt) {
+        try {
+          await vt.applyConstraints({ advanced: [{ torch: on }] });
+          const applied = vt.getSettings && vt.getSettings().torch;
+          // unsupported "advanced" constraints are ignored without error: only trust what the track reports
+          ok = applied === undefined ? state.torchSupported : applied === on;
+        } catch { ok = false; }
+      }
+      if (!ok) native((n) => { try { ok = !!n.setTorch(on); } catch { ok = false; } });
+      if (!ok && on) toast('Flash indisponible sur cet objectif : essayez un autre objectif.');
+      state.torch = ok ? on : false;
+    }
+    el.torchBtn.setAttribute('aria-pressed', String(state.torch));
+    sendState();
+  }
+
+  /** Battery saver: nobody is using the camera on the PC, so release it (the microphone keeps running). */
+  async function setStandby(on, reason = 'user') {
+    on = !!on;
+    if (reason === 'user') state.camWanted = !on;
+    if (DEMO || !state.stream) return;
+    if (on === state.standby) {
+      const next = on ? reason : '';
+      if (next !== state.standbyReason) { state.standbyReason = next; setLiveMode(liveModeNow()); sendState(); }
+      return;
+    }
+    state.standby = on;
+    state.standbyReason = on ? reason : '';
+    if (on) {
+      if (state.screenLight) await setScreenLight(false);
+      state.torch = false;
+      el.torchBtn.setAttribute('aria-pressed', 'false');
+      if (state.videoSender) await state.videoSender.replaceTrack(null).catch(() => {});
+      const old = videoTrack();
+      if (old) { old.stop(); state.stream.removeTrack(old); }
+      el.preview.srcObject = null;
+      setLiveMode(liveModeNow());
+    } else {
+      try {
+        await openVideo({ deviceId: state.lensId, facing: state.facing });
+      } catch (err) {
+        dbg('wake failed', err && err.name, err && err.message);
+        const running = videoTrack() && videoTrack().readyState === 'live';
+        state.standby = !running;
+        state.standbyReason = state.standby ? (document.visibilityState === 'hidden' ? 'sleep' : 'user') : '';
+        if (!running && document.visibilityState !== 'hidden') toast('Impossible de rallumer la caméra.');
+      }
+      setLiveMode(liveModeNow());
+    }
+    el.camBtn.setAttribute('aria-pressed', String(state.standby));
+    sendState();
+  }
+
+  function setMic(on) {
+    state.micMuted = !on;
+    const at = audioTrack();
+    if (at) at.enabled = on;
+    el.micBtn.setAttribute('aria-pressed', String(state.micMuted));
+    sendState();
+  }
+
+  async function reacquire() {
+    // The browser stops the camera when the page is hidden: grab it again.
+    const old = state.stream;
+    if (old) old.getTracks().forEach((t) => t.stop());
+    let stream;
+    try {
+      stream = await acquire(state.facing, { audioOnly: state.standby, deviceId: state.standby ? '' : state.lensId });
+    } catch (err) {
+      stream = await acquire(state.facing, { audioOnly: state.standby });
+    }
+    state.stream = stream;
+    if (state.pc) {
+      const video = stream.getVideoTracks()[0];
+      const audio = stream.getAudioTracks()[0];
+      for (const sender of state.pc.getSenders()) {
+        const next = sender === state.videoSender ? video : audio;
+        if (next) await sender.replaceTrack(next).catch(() => {});
+      }
+    }
+    attachPreview();
+    detectCaps();
+  }
+
+  // ---------------------------------------------------------------------------
+  // WebRTC
+  // ---------------------------------------------------------------------------
+
+  function waitIce(pc, ms = 2500) {
+    return new Promise((resolve) => {
+      if (pc.iceGatheringState === 'complete') return resolve();
+      const done = () => { pc.removeEventListener('icegatheringstatechange', check); clearTimeout(timer); resolve(); };
+      const check = () => { if (pc.iceGatheringState === 'complete') done(); };
+      const timer = setTimeout(done, ms);
+      pc.addEventListener('icegatheringstatechange', check);
+    });
+  }
+
+  async function post(path, body) {
+    let res;
+    try {
+      res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: state.token, ...body })
+      });
+    } catch {
+      throw new Error('Impossible de joindre EvCam sur votre PC.\nVérifiez que l’application est ouverte et que le téléphone est sur le même Wi-Fi.');
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.error || `Erreur ${res.status}`);
+      err.fatal = res.status === 403;
+      throw err;
+    }
+    return data;
+  }
+
+  function closePeer() {
+    clearTimeout(state.dropTimer);
+    const pc = state.pc;
+    state.pc = null;
+    state.dc = null;
+    if (pc) {
+      pc.onconnectionstatechange = null;
+      try { pc.close(); } catch { /* ignore */ }
+    }
+  }
+
+  async function connect() {
+    closePeer();
+    const pc = new RTCPeerConnection({ iceServers: [], bundlePolicy: 'max-bundle' });
+    state.pc = pc;
+    state.videoSender = null;
+    for (const track of state.stream.getTracks()) {
+      if (track.kind === 'video') track.contentHint = 'motion';
+      const sender = pc.addTrack(track, state.stream);
+      if (track.kind === 'video') state.videoSender = sender;
+    }
+    if (!state.videoSender) {
+      // standby: no camera right now, but keep a video m-line so it can be switched on later
+      state.videoSender = pc.addTransceiver('video', { direction: 'sendonly', streams: [state.stream] }).sender;
+    }
+    applyCodecPreference(pc);
+    const dc = pc.createDataChannel('ctl', { ordered: true });
+    state.dc = dc;
+    dc.onopen = () => sendState(true);
+    dc.onmessage = onControl;
+    pc.onconnectionstatechange = () => onConnectionState(pc);
+
+    await pc.setLocalDescription(await pc.createOffer());
+    await waitIce(pc);
+    if (state.pc !== pc) throw new Error('annulé');
+
+    const answer = await post('/api/offer', { type: 'offer', sdp: pc.localDescription.sdp, device: state.device });
+    if (state.pc !== pc) throw new Error('annulé');
+    await pc.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
+    tuneSender();
+  }
+
+  /** H.264 uses the phone's hardware encoder (far less battery than software VP8). */
+  function applyCodecPreference(pc) {
+    const pref = state.cfg.codec;
+    if (!pref || pref === 'auto' || !window.RTCRtpSender || !RTCRtpSender.getCapabilities) return;
+    const transceiver = pc.getTransceivers().find((t) => t.sender === state.videoSender);
+    if (!transceiver || !transceiver.setCodecPreferences) return;
+    try {
+      const codecs = RTCRtpSender.getCapabilities('video').codecs;
+      const wanted = pref === 'h264' ? /^video\/h264$/i : /^video\/vp8$/i;
+      const preferred = codecs.filter((c) => wanted.test(c.mimeType));
+      if (!preferred.length) return; // not available here: keep the browser default
+      const score = (c) => (/profile-level-id=42e01f/i.test(c.sdpFmtpLine || '') ? 2 : 0) + (/packetization-mode=1/i.test(c.sdpFmtpLine || '') ? 1 : 0);
+      preferred.sort((a, b) => score(b) - score(a));
+      transceiver.setCodecPreferences([...preferred, ...codecs.filter((c) => !wanted.test(c.mimeType))]);
+    } catch { /* keep the default negotiation */ }
+  }
+
+  async function tuneSender() {
+    const pc = state.pc;
+    if (!pc) return;
+    const sender = state.videoSender;
+    if (!sender) return;
+    try {
+      const p = sender.getParameters();
+      if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+      p.encodings[0].maxBitrate = state.cfg.bitrate;
+      p.encodings[0].maxFramerate = state.cfg.fps;
+      p.degradationPreference = 'maintain-resolution';
+      await sender.setParameters(p);
+    } catch { /* optional tuning */ }
+  }
+
+  const liveModeNow = () => (state.pc && state.pc.connectionState === 'connected' ? (state.standby ? 'standby' : 'live') : 'reconnect');
+
+  function setLiveMode(mode) {
+    if (mode === 'live' && state.standby) mode = 'standby';
+    el.livePill.dataset.mode = mode;
+    el.liveLabel.textContent = mode === 'reconnect' ? 'RECONNEXION' : mode === 'standby' ? 'MICRO SEUL' : 'EN DIRECT';
+    if (mode === 'reconnect') el.liveInfo.textContent = '';
+    if (mode === 'standby') el.liveInfo.textContent = state.standbyReason === 'sleep' ? 'écran éteint' : 'caméra désactivée';
+  }
+
+  function onConnectionState(pc) {
+    if (pc !== state.pc) return;
+    const s = pc.connectionState;
+    if (s === 'connected') {
+      state.attempts = 0;
+      clearTimeout(state.dropTimer);
+      setLiveMode('live');
+    } else if (s === 'disconnected') {
+      setLiveMode('reconnect');
+      clearTimeout(state.dropTimer);
+      state.dropTimer = setTimeout(() => {
+        if (state.pc === pc && pc.connectionState !== 'connected') reconnect();
+      }, 3000);
+    } else if (s === 'failed' || s === 'closed') {
+      setLiveMode('reconnect');
+      reconnect();
+    }
+  }
+
+  async function reconnect() {
+    if (state.userStopped || state.reconnecting || !state.stream) return;
+    state.reconnecting = true;
+    setLiveMode('reconnect');
+    try {
+      while (!state.userStopped) {
+        state.attempts++;
+        try {
+          await connect();
+          return;
+        } catch (err) {
+          if (err.fatal) return fail('Le code de connexion n’est plus valide.\nScannez à nouveau le QR code affiché dans EvCam.', true);
+          await sleep(Math.min(800 * state.attempts, 5000));
+        }
+      }
+    } finally {
+      state.reconnecting = false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // control channel (PC -> phone and back)
+  // ---------------------------------------------------------------------------
+
+  function dcSend(obj) {
+    const dc = state.dc;
+    if (dc && dc.readyState === 'open') dc.send(JSON.stringify(obj));
+  }
+
+  function sendState(hello = false) {
+    const b = state.battery;
+    dcSend({
+      t: hello ? 'hello' : 'state',
+      device: state.device,
+      facing: state.facing,
+      hasMic: !!audioTrack(),
+      micMuted: state.micMuted,
+      torch: state.torch,
+      torchSupported: state.torchSupported,
+      torchMode: state.facing === 'user' ? 'screen' : 'torch',
+      zoom: state.zoom,
+      lensId: state.lensId,
+      lenses: friendlyLenses(),
+      standby: state.standby,
+      standbyReason: state.standbyReason,
+      codec: state.cfg.codec,
+      battery: b ? Math.round(b.level * 100) : null,
+      charging: b ? !!b.charging : null
+    });
+  }
+
+  async function onControl(event) {
+    let msg;
+    try { msg = JSON.parse(event.data); } catch { return; }
+    dbg('control', event.data);
+    if (msg.t === 'bye') {
+      toast('Déconnecté depuis le PC');
+      return stop(false);
+    }
+    if (msg.t !== 'config') return;
+
+    for (const key of ['width', 'height', 'fps', 'bitrate', 'noiseSuppression']) {
+      if (msg[key] !== undefined) state.cfg[key] = msg[key];
+    }
+    if (msg.eco !== undefined) { state.eco = !!msg.eco; scheduleEcoBlackout(); }
+
+    // wake up first: everything below needs the camera
+    if (msg.standby !== undefined) state.camWanted = !msg.standby;
+    // screen off: the camera cannot be woken now, it comes back by itself when the screen does
+    const asleep = state.standby && state.standbyReason === 'sleep' && document.visibilityState === 'hidden';
+    if (msg.standby === false && !asleep) await setStandby(false, 'user');
+
+    if (!state.standby) {
+      const vt = videoTrack();
+      if (msg.lens && msg.lens !== state.lensId) {
+        await selectLens(msg.lens);
+      } else if (msg.facing && msg.facing !== state.facing) {
+        await switchCamera(msg.facing);
+      } else if (vt && !DEMO && (msg.width || msg.height || msg.fps)) {
+        await vt.applyConstraints({
+          width: { ideal: state.cfg.width },
+          height: { ideal: state.cfg.height },
+          aspectRatio: { ideal: state.cfg.width / state.cfg.height },
+          frameRate: { ideal: state.cfg.fps }
+        }).catch(() => {});
+      }
+      if (msg.zoom !== undefined) await setZoom(msg.zoom);
+    }
+    tuneSender();
+    const at = audioTrack();
+    if (at && msg.noiseSuppression !== undefined) at.applyConstraints({ noiseSuppression: msg.noiseSuppression }).catch(() => {});
+    if (msg.torch !== undefined) await setTorch(!!msg.torch);
+    if (msg.mute !== undefined) setMic(!msg.mute);
+    if (msg.standby === true) await setStandby(true, 'user');
+    sendState();
+
+    if (msg.codec && msg.codec !== state.cfg.codec) {
+      state.cfg.codec = msg.codec;
+      if (!state.reconnecting) reconnect(); // new offer with the other codec
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // battery: black screen (OLED pixels off, backlight at minimum) and eco auto-blackout
+  // ---------------------------------------------------------------------------
+
+  let ecoTimer = 0;
+
+  function showBlackout(on) {
+    el.blackout.hidden = !on;
+    if (on && state.screenLight) setScreenLight(false);
+    native((n) => n.setDim(!!on));
+    if (!on) scheduleEcoBlackout();
+  }
+
+  /** In eco mode the screen goes black by itself after a few seconds without touch; the camera keeps running. */
+  function scheduleEcoBlackout() {
+    clearTimeout(ecoTimer);
+    if (!state.eco || !state.running || state.screenLight || !el.blackout.hidden) return;
+    ecoTimer = setTimeout(() => showBlackout(true), 15000);
+  }
+
+  /** Zoom pills (0,5× ultra grand-angle, 1×, 2×...) and the list of lenses the browser exposes. */
+  function renderSheet() {
+    const z = state.zoom;
+    el.sheetZoom.innerHTML = '';
+    if (z.supported) {
+      const presets = [];
+      if (z.min < 0.95) presets.push(Math.round(z.min * 10) / 10);
+      for (const p of [1, 2, 3, 5]) if (p >= z.min - 0.01 && p <= z.max + 0.01 && !presets.includes(p)) presets.push(p);
+      for (const p of presets) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'pill-btn';
+        b.textContent = (p < 1 ? 'Ultra grand-angle ' : '') + String(p).replace('.', ',') + '×';
+        b.setAttribute('aria-pressed', String(Math.abs(z.value - p) < 0.06));
+        b.addEventListener('click', () => setZoom(p));
+        el.sheetZoom.appendChild(b);
+      }
+    }
+    el.sheetLenses.innerHTML = '';
+    const lenses = friendlyLenses();
+    if (lenses.length > 1) {
+      for (const l of lenses) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'lens-btn';
+        b.textContent = l.name;
+        b.setAttribute('aria-pressed', String(l.current));
+        b.addEventListener('click', () => { el.sheet.hidden = true; selectLens(l.id); });
+        el.sheetLenses.appendChild(b);
+      }
+    }
+    const hasMulti = lenses.length > 1;
+    el.sheetNote.textContent = z.supported || hasMulti
+      ? (hasMulti ? 'Chaque objectif du téléphone est listé ci-dessus : essayez-les pour trouver l’ultra grand-angle.' : '')
+      : 'Ce téléphone n’expose qu’un seul objectif sans zoom au navigateur.';
+  }
+
+  // ---------------------------------------------------------------------------
+  // lifecycle
+  // ---------------------------------------------------------------------------
+
+  async function requestWake() {
+    try {
+      if ('wakeLock' in navigator && !state.wake) {
+        state.wake = await navigator.wakeLock.request('screen');
+        state.wake.addEventListener('release', () => { state.wake = null; });
+      }
+    } catch { /* not allowed (low battery, etc.) */ }
+  }
+
+  function releaseWake() {
+    if (state.wake) state.wake.release().catch(() => {});
+    state.wake = null;
+  }
+
+  async function pollStats() {
+    const pc = state.pc;
+    if (!pc || pc.connectionState !== 'connected') return;
+    try {
+      const report = await pc.getStats();
+      let out = null;
+      report.forEach((r) => { if (r.type === 'outbound-rtp' && (r.kind === 'video' || r.mediaType === 'video')) out = r; });
+      if (!out || state.standby) return;
+      let rate = 0;
+      if (state.lastStats && out.timestamp > state.lastStats.t) {
+        rate = ((out.bytesSent - state.lastStats.bytes) * 8) / ((out.timestamp - state.lastStats.t) / 1000);
+      }
+      state.lastStats = { t: out.timestamp, bytes: out.bytesSent };
+      if (out.frameWidth) {
+        el.liveInfo.textContent = `${out.frameWidth}×${out.frameHeight} · ${Math.round(out.framesPerSecond || 0)} fps · ${(rate / 1e6).toFixed(1)} Mb/s`;
+      }
+    } catch { /* ignore */ }
+  }
+
+  function updateBattery() {
+    const b = state.battery;
+    if (!b) return;
+    el.batPill.hidden = false;
+    el.batPill.textContent = `Batterie ${Math.round(b.level * 100)} %${b.charging ? ' ⚡' : ''}`;
+  }
+
+  async function initBattery() {
+    try {
+      const b = await navigator.getBattery();
+      state.battery = b;
+      b.addEventListener('levelchange', () => { updateBattery(); sendState(); });
+      b.addEventListener('chargingchange', () => { updateBattery(); sendState(); });
+      updateBattery();
+    } catch { /* Battery API unavailable (iOS) */ }
+  }
+
+  function teardown() {
+    closePeer();
+    clearInterval(state.statsTimer);
+    clearInterval(state.demoTimer);
+    state.lastStats = null;
+    if (state.stream) state.stream.getTracks().forEach((t) => t.stop());
+    state.stream = null;
+    el.preview.srcObject = null;
+    releaseWake();
+    el.blackout.hidden = true;
+    el.screenLight.hidden = true;
+    el.sheet.hidden = true;
+    clearTimeout(ecoTimer);
+    state.running = false;
+    state.reconnecting = false;
+    state.standby = false;
+    state.standbyReason = '';
+    state.camWanted = true;
+    clearTimeout(bgTimer);
+    state.torch = false;
+    state.screenLight = false;
+    state.videoSender = null;
+    native((n) => { n.setStreaming(false); n.setDim(false); n.setBrightness(-1); });
+  }
+
+  async function start() {
+    if (state.running) return;
+    if (!state.token) {
+      el.idleMsg.hidden = false;
+      el.idleMsg.textContent = 'Scannez le QR code affiché dans EvCam sur votre PC pour vous connecter.';
+      return;
+    }
+    state.userStopped = false;
+    state.attempts = 0;
+    state.micMuted = false;
+    el.micBtn.setAttribute('aria-pressed', 'false');
+    setScreen('starting', 'Ouverture de la caméra…', 'Autorisez l’accès à la caméra et au micro si le navigateur vous le demande.');
+    try {
+      // camera disabled on the PC: only ask for the microphone (no camera permission, camera LED off)
+      const micOnly = state.camOff && state.wantMic && !DEMO;
+      state.stream = DEMO ? demoStream() : await acquire(state.facing, { audioOnly: micOnly });
+      state.standby = micOnly;
+      state.standbyReason = micOnly ? 'user' : '';
+      state.camWanted = !micOnly;
+      el.camBtn.setAttribute('aria-pressed', String(state.standby));
+    } catch (err) {
+      return fail(describeError(err));
+    }
+    attachPreview();
+    detectCaps();
+    setScreen('starting', 'Connexion à votre PC…', '');
+    try {
+      await connect();
+    } catch (err) {
+      return fail(err.fatal ? 'Le code de connexion est invalide.\nScannez à nouveau le QR code affiché dans EvCam.' : err.message, !!err.fatal);
+    }
+    state.running = true;
+    setLiveMode('live');
+    setScreen('live');
+    native((n) => n.setStreaming(true));
+    // keep streaming with the screen off: once, ask Android not to restrict EvCam in the background
+    native((n) => { if (n.askBatteryExemption) n.askBatteryExemption(); });
+    requestWake();
+    clearInterval(state.statsTimer);
+    state.statsTimer = setInterval(pollStats, 2000);
+  }
+
+  async function stop(notify = true) {
+    state.userStopped = true;
+    if (notify) { try { await post('/api/bye', {}); } catch { /* PC may already be gone */ } }
+    teardown();
+    setScreen('idle');
+    checkLink();
+  }
+
+  // ---------------------------------------------------------------------------
+  // idle screen: is the PC reachable?
+  // ---------------------------------------------------------------------------
+
+  let linkTimer = 0;
+  async function checkLink() {
+    clearTimeout(linkTimer);
+    if (app.dataset.state !== 'idle') return;
+    const card = el.linkCard;
+    try {
+      const res = await fetch(`/api/info?t=${encodeURIComponent(state.token)}`, { cache: 'no-store' });
+      const info = await res.json();
+      if (!info.authorized && NATIVE) { native((n) => n.home('token')); return; }
+      if (info.authorized && APP && !state.autoStarted && !state.userStopped) {
+        state.autoStarted = true;
+        start();
+        return;
+      }
+      if (info.authorized && info.prefs) {
+        if (info.prefs.codec) state.cfg.codec = info.prefs.codec;
+        state.eco = !!info.prefs.eco;
+        state.camOff = info.prefs.camera === false;
+      }
+      if (info.authorized) {
+        card.dataset.ok = 'yes';
+        el.linkTitle.textContent = 'EvCam trouvé sur votre PC';
+        el.linkSub.textContent = 'Prêt à diffuser';
+        el.startBtn.disabled = false;
+      } else {
+        card.dataset.ok = 'no';
+        el.linkTitle.textContent = 'Code de connexion manquant';
+        el.linkSub.textContent = 'Scannez le QR code affiché dans EvCam';
+      }
+    } catch {
+      card.dataset.ok = 'no';
+      el.linkTitle.textContent = 'PC injoignable';
+      el.linkSub.textContent = 'EvCam est-il ouvert ? Même Wi-Fi ?';
+    }
+    linkTimer = setTimeout(checkLink, 4000);
+  }
+
+  // ---------------------------------------------------------------------------
+  // wiring
+  // ---------------------------------------------------------------------------
+
+  el.startBtn.addEventListener('click', start);
+  document.querySelectorAll('.change-pc').forEach((b) => {
+    b.hidden = !NATIVE;
+    b.addEventListener('click', () => native((n) => n.home('pair')));
+  });
+  el.retryBtn.addEventListener('click', () => { setScreen('idle'); checkLink(); });
+  el.stopBtn.addEventListener('click', () => stop(true));
+  el.micToggle.addEventListener('change', () => { state.wantMic = el.micToggle.checked; });
+  el.micBtn.addEventListener('click', () => setMic(state.micMuted));
+  el.torchBtn.addEventListener('click', () => setTorch(!state.torch));
+  el.camBtn.addEventListener('click', async () => {
+    await setStandby(!state.standby);
+    toast(state.standby ? 'Caméra désactivée : micro seul' : 'Caméra activée');
+  });
+  el.lensBtn.addEventListener('click', async () => { await detectCaps(); el.sheet.hidden = false; });
+  el.sheetClose.addEventListener('click', () => { el.sheet.hidden = true; });
+  el.sheet.addEventListener('click', (e) => { if (e.target === el.sheet) el.sheet.hidden = true; });
+  el.screenLight.addEventListener('click', () => setTorch(false));
+  el.flipBtn.addEventListener('click', () => switchCamera(state.facing === 'user' ? 'environment' : 'user'));
+  el.darkBtn.addEventListener('click', () => showBlackout(true));
+  el.blackout.addEventListener('click', () => showBlackout(false));
+  ['pointerdown', 'touchstart'].forEach((evt) => document.addEventListener(evt, () => { if (el.blackout.hidden) scheduleEcoBlackout(); }, { passive: true }));
+
+  el.facingSeg.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-facing]');
+    if (!btn) return;
+    state.facing = btn.dataset.facing;
+    el.facingSeg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b === btn)));
+  });
+
+  // Screen off / app in the background: the microphone (and the connection) keep going thanks to the foreground
+  // service. Android may stop the camera there: when the video stops flowing, EvCam falls back to microphone only
+  // ("sleep" standby, not a user choice) and brings the camera back as soon as the screen is on again.
+  let bgTimer = 0;
+
+  async function framesAdvancing() {
+    const pc = state.pc;
+    if (!pc) return false;
+    const read = async () => {
+      let n = -1;
+      (await pc.getStats()).forEach((r) => { if (r.type === 'outbound-rtp' && (r.kind === 'video' || r.mediaType === 'video')) n = r.framesEncoded || r.framesSent || 0; });
+      return n;
+    };
+    try {
+      const a = await read();
+      await sleep(1500);
+      const b = await read();
+      return a >= 0 && b > a;
+    } catch { return false; }
+  }
+
+  async function checkBackground() {
+    clearTimeout(bgTimer);
+    if (document.visibilityState !== 'hidden' || !state.running || state.userStopped) return;
+    if (!state.standby && !DEMO) {
+      const vt = videoTrack();
+      const alive = !!vt && vt.readyState === 'live' && !vt.muted && (await framesAdvancing());
+      if (!alive && document.visibilityState === 'hidden') {
+        dbg('background: the phone stopped the camera, microphone only until the screen is back');
+        await setStandby(true, 'sleep');
+      }
+    }
+    bgTimer = setTimeout(checkBackground, 8000);
+  }
+
+  document.addEventListener('visibilitychange', async () => {
+    if (!state.running || state.userStopped) return;
+    if (document.visibilityState === 'hidden') {
+      clearTimeout(bgTimer);
+      bgTimer = setTimeout(checkBackground, 2500);
+      return;
+    }
+    clearTimeout(bgTimer);
+    requestWake();
+    const dead = state.stream && state.stream.getTracks().some((t) => t.readyState === 'ended');
+    if (dead && !DEMO) {
+      try { await reacquire(); } catch (err) { return fail(describeError(err)); }
+    }
+    const s = state.pc && state.pc.connectionState;
+    if (!state.pc || s === 'failed' || s === 'closed' || s === 'disconnected' || dead) reconnect();
+    // the screen is back: give the camera back if it was only stopped by the sleep
+    if (state.standby && state.standbyReason === 'sleep' && state.camWanted) await setStandby(false, 'sleep');
+  });
+
+  window.addEventListener('pagehide', (event) => {
+    if (event.persisted) return; // the page is only frozen (screen off), not closed
+    if (state.running && !state.userStopped && navigator.sendBeacon) {
+      navigator.sendBeacon('/api/bye', new Blob([JSON.stringify({ token: state.token })], { type: 'application/json' }));
+    }
+  });
+
+  // boot
+  deviceLabel().then((label) => { state.device = label; });
+  initBattery();
+  if (!window.isSecureContext) {
+    el.idleMsg.hidden = false;
+    el.idleMsg.textContent = 'Cette page doit être ouverte en https:// pour accéder à la caméra.';
+  }
+  if (DEMO) el.facingSeg.parentElement.querySelector('.label').textContent = 'Caméra (démo)';
+  checkLink();
+})();
