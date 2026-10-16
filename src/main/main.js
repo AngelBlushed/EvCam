@@ -389,7 +389,11 @@ function registerIpc() {
     } catch { /* invalid url */ }
     return false;
   });
-  ipcMain.on('renderer:ready', () => { rendererReady = true; });
+  ipcMain.on('renderer:ready', () => {
+    rendererReady = true;
+    // tell the page right away whether it is on screen (an autostart in the tray never fires a show/hide event)
+    send('app:visible', !!win && win.isVisible() && !win.isMinimized());
+  });
   ipcMain.handle('apk:reveal', () => {
     if (!fs.existsSync(apkPath())) return false;
     shell.showItemInFolder(apkPath());
@@ -416,6 +420,9 @@ function registerIpc() {
 app.on('second-instance', () => showWindow());
 app.on('before-quit', () => { quitting = true; settings && settings.flush(); });
 app.on('window-all-closed', () => { /* stay alive in the tray */ });
+// kept in evcam.log to diagnose crashes on other people's PCs
+app.on('child-process-gone', (_e, details) => console.error('[evcam] child process gone:', JSON.stringify(details)));
+app.on('render-process-gone', (_e, _wc, details) => console.error('[evcam] renderer gone:', JSON.stringify(details)));
 
 app.whenReady().then(async () => {
   settings = new Settings();

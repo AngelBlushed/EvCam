@@ -122,6 +122,7 @@ class UI {
     });
     $$('.tabpane').forEach((pane) => { pane.hidden = pane.dataset.pane !== name; });
     if (name === 'audio') { this.refreshOutputs(); if (this.extras) this.extras.refreshMic(); }
+    if (name === 'camera' && this.extras) this.extras.refreshDiscord();
   }
 
   _bindSettings() {
@@ -542,8 +543,13 @@ class UI {
   }
 
   setWindowVisible(visible) {
+    const reappeared = visible && this.windowVisible === false;
     this.windowVisible = visible;
     this._updateVisibility();
+    if (reappeared && this.extras) { // back from the tray (or first time on screen after a hidden start): refresh once
+      if (this.tab === 'camera') this.extras.refreshDiscord();
+      if (!this.extras.mic) this.extras.refreshMic();
+    }
   }
 
   _updateVisibility() {

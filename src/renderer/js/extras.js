@@ -36,9 +36,14 @@ class Extras {
     $('#btnMicRestore').addEventListener('click', () => this.restoreMic());
 
     this.refreshDiscord();
-    setInterval(() => this.refreshDiscord(), 8000);
-    this.refreshMic();
-    setInterval(() => { if (this.ui.tab === 'audio') this.refreshMic(); }, 15000);
+    // Discord is looked up inside EvCam (no child process), and only while the window is on screen: an app that
+    // idles in the tray must not touch the disk. The microphone state (which does start PowerShell) is read once,
+    // when the Micro tab opens and after each action: never on a timer.
+    setInterval(() => {
+      if (this.ui.windowVisible !== false && document.visibilityState === 'visible' && this.ui.tab === 'camera') this.refreshDiscord();
+    }, 20000);
+    // read once, a few seconds after the start-up burst, and only if the window is on screen
+    setTimeout(() => { if (this.ui.windowVisible !== false) this.refreshMic(); }, 6000);
   }
 
   // ------------------------------------------------------------------ lens / zoom / flash

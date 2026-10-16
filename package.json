@@ -1,7 +1,7 @@
 {
   "name": "evcam",
   "productName": "EvCam",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Utilisez la caméra et le micro de votre téléphone sur votre PC.",
   "main": "src/main/main.js",
   "author": "EvCam",

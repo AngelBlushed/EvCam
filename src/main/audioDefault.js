@@ -121,7 +121,9 @@ public static class EvAudio {
 }
 `;
 
+// Reading the endpoints only needs the registry: no C# is compiled here (Add-Type starts the compiler, which is heavy on a slow disk).
 const READ_SCRIPT = String.raw`
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 function Read-Endpoints($flow, $prefix) {
   $base = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\$flow"
   $out = @()
@@ -140,8 +142,6 @@ function Read-Endpoints($flow, $prefix) {
 [pscustomobject]@{
   devices = @(Read-Endpoints 'Capture' '{0.0.1.00000000}')
   renderDevices = @(Read-Endpoints 'Render' '{0.0.0.00000000}')
-  defaultConsole = [EvAudio]::GetDefault(0)
-  defaultComm = [EvAudio]::GetDefault(2)
 } | ConvertTo-Json -Compress -Depth 5
 `;
 
@@ -172,8 +172,16 @@ const NAMES = {
  * Active microphones, the current Windows default, and the two ends of the virtual cable
  * (found by id once known, otherwise by their VB-CABLE / EvCam names).
  */
-async function status(known = {}) {
-  const res = await runPowershell(['-EncodedCommand', encode(withCode(READ_SCRIPT))]);
+let statusRun = null;
+
+function status(known = {}) {
+  // one PowerShell at a time: concurrent callers share the running one
+  if (!statusRun) statusRun = readStatus(known).finally(() => { statusRun = null; });
+  return statusRun;
+}
+
+async function readStatus(known) {
+  const res = await runPowershell(['-EncodedCommand', encode(READ_SCRIPT)]);
   try {
     const data = JSON.parse(res.stdout);
     const devices = [].concat(data.devices || []);

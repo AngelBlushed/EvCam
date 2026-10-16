@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const { execFile, spawn } = require('child_process');
+const procs = require('./procs');
 
 /** Discord variants (Squirrel installs under %LOCALAPPDATA%\<Name>\app-x.y.z\<Name>.exe). */
 const VARIANTS = ['Discord', 'DiscordPTB', 'DiscordCanary'];
@@ -14,22 +15,46 @@ function powershell(script, timeout = 15000) {
   });
 }
 
-/** Which Discord variants are running, and since when. */
-async function status() {
+let fallbackAt = 0;
+let fallbackList = [];
+
+/** Last resort when the in-process lookup is unavailable: starts PowerShell, so the answer is kept for a minute. */
+async function listWithPowerShell() {
+  if (Date.now() - fallbackAt < 60000) return fallbackList;
   const script =
     `$r = Get-Process -Name ${VARIANTS.join(',')} -ErrorAction SilentlyContinue | ` +
     `Select-Object Name, Id, Path, @{n='Start';e={$_.StartTime.ToString('o')}}; ` +
     `if ($r) { @($r) | ConvertTo-Json -Compress } else { '[]' }`;
   const res = await powershell(script);
-  let list = [];
-  try { list = JSON.parse(res.stdout || '[]'); } catch { list = []; }
-  const byName = new Map();
-  for (const p of list) {
-    const cur = byName.get(p.Name);
-    if (!cur || p.Start < cur.startedAt) byName.set(p.Name, { name: p.Name, path: p.Path, startedAt: p.Start });
+  fallbackAt = Date.now();
+  try { fallbackList = [].concat(JSON.parse(res.stdout || '[]')).map((p) => ({ name: p.Name, path: p.Path, startedAt: p.Start })); } catch { fallbackList = []; }
+  return fallbackList;
+}
+
+function list() {
+  try {
+    return Promise.resolve(procs.find(VARIANTS));
+  } catch (err) {
+    console.warn('[discord] in-process lookup failed, using PowerShell:', err.message);
+    return listWithPowerShell();
   }
-  const running = [...byName.values()];
-  return { running: running.length > 0, variants: running, startedAt: running.map((v) => v.startedAt).sort()[0] || null };
+}
+
+let inFlight = null;
+
+/** Which Discord variants are running, and since when. Answers are shared while one is being computed. */
+function status() {
+  if (inFlight) return inFlight;
+  inFlight = (async () => {
+    const byName = new Map();
+    for (const p of await list()) {
+      const cur = byName.get(p.name);
+      if (!cur || (p.startedAt || '') < (cur.startedAt || '')) byName.set(p.name, { name: p.name, path: p.path, startedAt: p.startedAt });
+    }
+    const running = [...byName.values()];
+    return { running: running.length > 0, variants: running, startedAt: running.map((v) => v.startedAt).filter(Boolean).sort()[0] || null };
+  })().finally(() => { inFlight = null; });
+  return inFlight;
 }
 
 /** Closes and relaunches every running Discord so it re-reads the camera list (Discord only does it at startup). */
