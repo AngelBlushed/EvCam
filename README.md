@@ -76,6 +76,9 @@ Cela se fait à l’installation du PC (étape proposée) ou plus tard dans l’
 - **Encodage H.264** (par défaut) : utilise la puce vidéo du téléphone, bien plus sobre que le VP8 logiciel. Repasse tout seul en VP8 si le téléphone ne sait pas l’encoder.
 - Le bouton *lune* du téléphone coupe l’écran (pixels noirs, rétroéclairage au minimum) sans arrêter la caméra.
 - EvCam affiche la **batterie du téléphone**, une **autonomie estimée** (une fois débranché) et vous prévient à 20 % et 10 %.
+- **Protection contre la chauffe** (appli Android) : EvCam surveille la température et l’état thermique du téléphone ; s’il chauffe, il baisse tout seul la qualité (720p / 30 i/s, puis 480p / 24 i/s) et la rétablit une fois refroidi. Un message l’indique sur le PC.
+- **Écran qui s’assombrit tout seul** : sans toucher le téléphone, la luminosité tombe au minimum après 25 secondes (un écran lumineux fait beaucoup chauffer) ; un toucher la rétablit.
+- Les débits demandés au téléphone sont modérés (≈ 10 Mb/s en 1080p / 60, ≈ 5 Mb/s en 1080p / 30) : l’encodeur et le Wi-Fi du téléphone chauffent moins. Préférez **30 images/s**, c’est deux fois moins de travail que 60.
 
 ### Commandes dans l’application PC
 

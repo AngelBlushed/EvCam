@@ -10,7 +10,7 @@ const QUALITIES = {
 };
 
 /** Bitrate asked from the phone for each quality / frame rate. */
-function targetBitrate(quality, fps, factor = 0.12) {
+function targetBitrate(quality, fps, factor = 0.08) {
   const { w, h } = QUALITIES[quality] || QUALITIES['720p'];
   return Math.round(w * h * fps * factor);
 }
@@ -18,17 +18,18 @@ function targetBitrate(quality, fps, factor = 0.12) {
 /** Quality / frame rate / bitrate really used: the battery saver caps them (720p, 24 fps, lighter bitrate). */
 function effectiveCamera(settings) {
   let { quality, fps } = settings.camera;
-  let factor = 0.12;
+  // bits per pixel and frame: a phone's hardware encoder + the Wi-Fi radio are what make it hot, so stay modest
+  let factor = 0.08;
   if (settings.power && settings.power.eco) {
     if (quality === '1080p') quality = '720p';
     fps = Math.min(fps, 24);
-    factor = 0.07;
+    factor = 0.05;
   }
   const size = QUALITIES[quality] || QUALITIES['720p'];
   // "wide" captures the whole 4:3 sensor (a 16:9 video crops the top and bottom of the scene)
   const wide = !!settings.camera.wide;
   const capture = wide ? { w: Math.round((size.h * 4) / 3 / 4) * 4, h: size.h } : size;
-  return { quality, fps, size, capture, wide, bitrate: Math.round(capture.w * capture.h * fps * factor) };
+  return { quality, fps, size, capture, wide, bitrate: Math.max(1000000, Math.round(capture.w * capture.h * fps * factor)) };
 }
 
 // ---------------------------------------------------------------------------

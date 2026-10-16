@@ -37,7 +37,7 @@ class Engine extends EventTarget {
     this.device = '';
     this.phone = {
       facing: 'user', hasMic: true, micMuted: false, torch: false, torchSupported: false, torchMode: 'torch',
-      zoom: { supported: false, min: 1, max: 1, value: 1 }, lensId: '', lenses: [], standby: false, standbyReason: '', codec: '',
+      zoom: { supported: false, min: 1, max: 1, value: 1 }, lensId: '', lenses: [], standby: false, standbyReason: '', thermal: 0, tempC: null, codec: '',
       battery: null, charging: null
     };
     this.batteryLog = [];
@@ -70,6 +70,7 @@ class Engine extends EventTarget {
     this.device = session.device;
     this.phone.standby = false;
     this.phone.standbyReason = '';
+    this.phone.thermal = 0;
     this._setStatus('connecting');
 
     pc.ontrack = (event) => this._onTrack(session, event);
@@ -103,7 +104,7 @@ class Engine extends EventTarget {
       try { msg = JSON.parse(event.data); } catch { return; }
       if (msg.t === 'hello' || msg.t === 'state') {
         if (msg.device) { session.device = msg.device; this.device = msg.device; }
-        for (const key of ['facing', 'hasMic', 'micMuted', 'torch', 'torchSupported', 'torchMode', 'zoom', 'lensId', 'lenses', 'standby', 'standbyReason', 'codec', 'battery', 'charging']) {
+        for (const key of ['facing', 'hasMic', 'micMuted', 'torch', 'torchSupported', 'torchMode', 'zoom', 'lensId', 'lenses', 'standby', 'standbyReason', 'thermal', 'tempC', 'codec', 'battery', 'charging']) {
           if (msg[key] !== undefined) this.phone[key] = msg[key];
         }
         if (msg.battery != null) this._logBattery(msg.battery, !!msg.charging);

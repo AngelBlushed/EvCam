@@ -62,6 +62,9 @@
     standby: false,              // camera switched off (microphone only), from the PC or from this phone
     standbyReason: '',           // 'user' (chosen) | 'sleep' (screen off / app in the background: the phone stopped the camera)
     camWanted: true,             // the camera is wanted (not switched off by the user): brought back after a sleep
+    thermal: { level: 0, tempC: null, status: 0 }, // 0 normal, 1 warm (720p30), 2 hot (480p24): set by checkThermal()
+    thermalTimer: 0,
+    dimmed: false,               // screen at its lowest brightness after a while without touch
     camOff: false,               // the PC asked for microphone-only mode before the stream started
     eco: false,
     lensId: '',
@@ -156,8 +159,24 @@
   const videoTrack = () => (state.stream ? state.stream.getVideoTracks()[0] : null);
   const audioTrack = () => (state.stream ? state.stream.getAudioTracks()[0] : null);
 
+  /** Settings really used: the PC's choice, lowered while the phone is hot (see checkThermal). */
+  function effCfg() {
+    const c = { ...state.cfg };
+    const cap = [null, { px: 1280 * 720, fps: 30, floor: 1500000 }, { px: 848 * 480, fps: 24, floor: 800000 }][state.thermal.level];
+    if (!cap) return c;
+    const px = c.width * c.height;
+    if (px > cap.px) {
+      const k = Math.sqrt(cap.px / px);
+      c.width = Math.max(4, Math.round((c.width * k) / 4) * 4);
+      c.height = Math.max(4, Math.round((c.height * k) / 4) * 4);
+    }
+    c.fps = Math.min(c.fps, cap.fps);
+    c.bitrate = Math.max(cap.floor, Math.round(Math.min(c.bitrate, c.width * c.height * c.fps * 0.09)));
+    return c;
+  }
+
   function videoConstraints(facing, deviceId) {
-    const { width, height, fps } = state.cfg;
+    const { width, height, fps } = effCfg();
     const base = { width: { ideal: width }, height: { ideal: height }, aspectRatio: { ideal: width / height }, frameRate: { ideal: fps } };
     return deviceId ? { ...base, deviceId: { exact: deviceId } } : { ...base, facingMode: { ideal: facing } };
   }
@@ -345,6 +364,7 @@
 
   /** The front camera has no flash: light the face with the screen instead (white screen, full brightness). */
   async function setScreenLight(on) {
+    if (on && state.dimmed) autoDim(false);
     state.screenLight = !!on;
     el.screenLight.hidden = !on;
     if (on) { el.blackout.hidden = true; clearTimeout(ecoTimer); }
@@ -552,8 +572,9 @@
     try {
       const p = sender.getParameters();
       if (!p.encodings || !p.encodings.length) p.encodings = [{}];
-      p.encodings[0].maxBitrate = state.cfg.bitrate;
-      p.encodings[0].maxFramerate = state.cfg.fps;
+      const c = effCfg();
+      p.encodings[0].maxBitrate = c.bitrate;
+      p.encodings[0].maxFramerate = c.fps;
       p.degradationPreference = 'maintain-resolution';
       await sender.setParameters(p);
     } catch { /* optional tuning */ }
@@ -633,6 +654,8 @@
       lenses: friendlyLenses(),
       standby: state.standby,
       standbyReason: state.standbyReason,
+      thermal: state.thermal.level,
+      tempC: state.thermal.tempC,
       codec: state.cfg.codec,
       battery: b ? Math.round(b.level * 100) : null,
       charging: b ? !!b.charging : null
@@ -667,11 +690,12 @@
       } else if (msg.facing && msg.facing !== state.facing) {
         await switchCamera(msg.facing);
       } else if (vt && !DEMO && (msg.width || msg.height || msg.fps)) {
+        const c = effCfg();
         await vt.applyConstraints({
-          width: { ideal: state.cfg.width },
-          height: { ideal: state.cfg.height },
-          aspectRatio: { ideal: state.cfg.width / state.cfg.height },
-          frameRate: { ideal: state.cfg.fps }
+          width: { ideal: c.width },
+          height: { ideal: c.height },
+          aspectRatio: { ideal: c.width / c.height },
+          frameRate: { ideal: c.fps }
         }).catch(() => {});
       }
       if (msg.zoom !== undefined) await setZoom(msg.zoom);
@@ -699,6 +723,17 @@
   function showBlackout(on) {
     el.blackout.hidden = !on;
     if (on && state.screenLight) setScreenLight(false);
+    state.dimmed = false;
+    el.preview.style.visibility = on ? 'hidden' : ''; // a hidden preview is not composited: less work for the GPU
+    native((n) => n.setDim(!!on));
+    if (!on) scheduleEcoBlackout();
+  }
+
+  /** Normal mode in the Android app: after a while without touch the backlight goes to its minimum (a bright screen heats the phone). */
+  function autoDim(on) {
+    if (state.dimmed === on) return;
+    state.dimmed = on;
+    el.preview.style.visibility = on ? 'hidden' : '';
     native((n) => n.setDim(!!on));
     if (!on) scheduleEcoBlackout();
   }
@@ -706,8 +741,9 @@
   /** In eco mode the screen goes black by itself after a few seconds without touch; the camera keeps running. */
   function scheduleEcoBlackout() {
     clearTimeout(ecoTimer);
-    if (!state.eco || !state.running || state.screenLight || !el.blackout.hidden) return;
-    ecoTimer = setTimeout(() => showBlackout(true), 15000);
+    if (!state.running || state.screenLight || !el.blackout.hidden || state.dimmed) return;
+    if (state.eco) ecoTimer = setTimeout(() => showBlackout(true), 15000);
+    else if (NATIVE) ecoTimer = setTimeout(() => autoDim(true), 25000);
   }
 
   /** Zoom pills (0,5× ultra grand-angle, 1×, 2×...) and the list of lenses the browser exposes. */
@@ -784,6 +820,45 @@
     } catch { /* ignore */ }
   }
 
+  // ---------------------------------------------------------------------------
+  // heat: the Android app reports the battery temperature and the system's thermal status; when the phone gets
+  // warm EvCam lowers resolution, frame rate and bitrate by itself, and restores them once it has cooled down
+  // ---------------------------------------------------------------------------
+
+  const THERMAL_MS = Math.max(1000, Number(params.get('thermalms')) || 15000); // (?thermalms=2000 speeds the check up for tests)
+
+  async function applyThermal() {
+    const vt = videoTrack();
+    const c = effCfg();
+    if (vt && !DEMO && !state.standby) {
+      await vt.applyConstraints({ width: { ideal: c.width }, height: { ideal: c.height }, aspectRatio: { ideal: c.width / c.height }, frameRate: { ideal: c.fps } }).catch(() => {});
+    }
+    tuneSender();
+  }
+
+  async function checkThermal() {
+    if (!NATIVE || typeof NATIVE.thermal !== 'function' || !state.running) return;
+    let info;
+    try { info = JSON.parse(NATIVE.thermal() || '{}'); } catch { return; }
+    const t = Number(info.tempC);
+    const status = Number(info.status) || 0;
+    const temp = Number.isFinite(t) ? t : 0;
+    state.thermal.tempC = Number.isFinite(t) ? Math.round(t * 10) / 10 : null;
+    state.thermal.status = status;
+    let level = state.thermal.level;
+    if (temp >= 43 || status >= 3) level = 2;
+    else if (level < 2 && (temp >= 40 || status >= 2)) level = Math.max(level, 1);
+    else if (level === 2 && temp < 41 && status <= 2) level = 1;
+    else if (level === 1 && temp < 38 && status <= 1) level = 0;
+    if (level !== state.thermal.level) {
+      state.thermal.level = level;
+      dbg('thermal level', level, state.thermal.tempC, status);
+      await applyThermal();
+      toast(level ? 'Téléphone chaud : qualité réduite automatiquement' : 'Téléphone refroidi : qualité rétablie');
+    }
+    sendState();
+  }
+
   function updateBattery() {
     const b = state.battery;
     if (!b) return;
@@ -814,6 +889,10 @@
     el.screenLight.hidden = true;
     el.sheet.hidden = true;
     clearTimeout(ecoTimer);
+    clearInterval(state.thermalTimer);
+    state.thermal = { level: 0, tempC: null, status: 0 };
+    state.dimmed = false;
+    el.preview.style.visibility = '';
     state.running = false;
     state.reconnecting = false;
     state.standby = false;
@@ -858,6 +937,10 @@
       return fail(err.fatal ? 'Le code de connexion est invalide.\nScannez à nouveau le QR code affiché dans EvCam.' : err.message, !!err.fatal);
     }
     state.running = true;
+    clearInterval(state.thermalTimer);
+    state.thermalTimer = setInterval(checkThermal, THERMAL_MS);
+    setTimeout(checkThermal, Math.min(3000, THERMAL_MS));
+    scheduleEcoBlackout();
     setLiveMode('live');
     setScreen('live');
     native((n) => n.setStreaming(true));
@@ -942,7 +1025,10 @@
   el.flipBtn.addEventListener('click', () => switchCamera(state.facing === 'user' ? 'environment' : 'user'));
   el.darkBtn.addEventListener('click', () => showBlackout(true));
   el.blackout.addEventListener('click', () => showBlackout(false));
-  ['pointerdown', 'touchstart'].forEach((evt) => document.addEventListener(evt, () => { if (el.blackout.hidden) scheduleEcoBlackout(); }, { passive: true }));
+  ['pointerdown', 'touchstart'].forEach((evt) => document.addEventListener(evt, () => {
+    if (state.dimmed) autoDim(false);
+    else if (el.blackout.hidden) scheduleEcoBlackout();
+  }, { passive: true }));
 
   el.facingSeg.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-facing]');

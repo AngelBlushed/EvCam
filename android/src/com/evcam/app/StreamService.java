@@ -25,7 +25,6 @@ public class StreamService extends Service {
 
     private PowerManager.WakeLock wakeLock;
     private WifiManager.WifiLock wifiLock;
-    private WifiManager.WifiLock wifiLockLowLatency;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -70,14 +69,11 @@ public class StreamService extends Service {
                 wakeLock.acquire();
             }
             if (wifiLock == null) {
-                // high performance keeps the radio awake with the screen OFF; low latency only helps with the screen on
+                // one lock only: the radio stays awake with the screen off. The "low latency" lock was dropped: it
+                // forces the radio to its highest power state for no benefit while a video stream already keeps it busy
                 WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
                 wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "evcam:wifi");
                 wifiLock.acquire();
-                if (Build.VERSION.SDK_INT >= 29) {
-                    wifiLockLowLatency = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "evcam:wifi-ll");
-                    wifiLockLowLatency.acquire();
-                }
             }
         } catch (Exception ignored) {
             // locks are an optimisation only
@@ -90,13 +86,11 @@ public class StreamService extends Service {
         try {
             if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
             if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
-            if (wifiLockLowLatency != null && wifiLockLowLatency.isHeld()) wifiLockLowLatency.release();
         } catch (Exception ignored) {
             // nothing to do
         }
         wakeLock = null;
         wifiLock = null;
-        wifiLockLowLatency = null;
         stopForeground(true);
         super.onDestroy();
     }

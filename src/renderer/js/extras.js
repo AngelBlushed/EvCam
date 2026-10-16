@@ -360,6 +360,12 @@ class Extras {
     $('#dezoomVal').textContent = `${store.get('camera.dezoom')} %`;
     const standby = engine.live && !!engine.phone.standby;
     $('#chipStandby').classList.toggle('on', standby);
+    const heat = engine.live ? engine.phone.thermal || 0 : 0;
+    $('#chipHot').classList.toggle('on', heat > 0);
+    if (heat > 0) {
+      const temp = engine.phone.tempC != null ? ` (${engine.phone.tempC} °C)` : '';
+      $('#chipHotText').textContent = heat > 1 ? `Téléphone très chaud${temp} · qualité réduite à 480p` : `Téléphone chaud${temp} · qualité réduite à 720p`;
+    }
     $('#chipStandbyText').textContent = engine.phone.standbyReason === 'sleep' ? 'Écran du téléphone éteint · micro seul' : 'Caméra désactivée · micro seul';
     $('#previewCard').dataset.standby = String(standby);
   }

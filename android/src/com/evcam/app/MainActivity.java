@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -12,6 +13,7 @@ import android.hardware.camera2.CameraManager;
 import android.net.Uri;
 import android.net.http.SslCertificate;
 import android.net.http.SslError;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
@@ -515,6 +517,32 @@ public class MainActivity extends Activity {
          * Screen off / app in the background: asks Android, once, not to restrict EvCam's battery use so the
          * system does not cut the stream. Returns true when EvCam is already exempt.
          */
+        /**
+         * Heat: battery temperature (°C) and Android's thermal status (0 none ... 3 severe, API 29+) as JSON, so the
+         * page can lower quality by itself when the phone gets hot.
+         */
+        @JavascriptInterface
+        public String thermal() {
+            if (!trusted()) return "{}";
+            try {
+                JSONObject o = new JSONObject();
+                Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                if (battery != null) {
+                    int tenths = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Integer.MIN_VALUE);
+                    if (tenths != Integer.MIN_VALUE) o.put("tempC", tenths / 10.0);
+                }
+                int status = 0;
+                if (Build.VERSION.SDK_INT >= 29) {
+                    PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                    status = pm.getCurrentThermalStatus();
+                }
+                o.put("status", status);
+                return o.toString();
+            } catch (Exception e) {
+                return "{}";
+            }
+        }
+
         @JavascriptInterface
         public boolean askBatteryExemption() {
             if (!trusted()) return false;
