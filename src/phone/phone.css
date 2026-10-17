@@ -31,15 +31,15 @@ body { overflow: hidden; }
 
 /* ---------- aurora background ---------- */
 .bg { position: fixed; inset: 0; overflow: hidden; z-index: 0; }
+/* The background is STATIC: a drifting, blurred background keeps the GPU producing frames all day (battery, heat). */
 .bg i {
   position: absolute;
   width: 70vmax;
   height: 70vmax;
   border-radius: 50%;
-  filter: blur(70px);
   opacity: 0.5;
-  animation: drift 22s ease-in-out infinite alternate;
 }
+body.streaming .bg { display: none; }
 .bg i:nth-child(1) { background: radial-gradient(circle, #5b3df5 0%, transparent 65%); top: -35vmax; left: -25vmax; }
 .bg i:nth-child(2) { background: radial-gradient(circle, #0ea5e9 0%, transparent 65%); bottom: -40vmax; right: -30vmax; animation-delay: -7s; opacity: 0.38; }
 .bg i:nth-child(3) { background: radial-gradient(circle, #ec4899 0%, transparent 65%); top: 30vh; left: 35vw; width: 40vmax; height: 40vmax; opacity: 0.18; animation-delay: -13s; }
@@ -68,7 +68,7 @@ body { overflow: hidden; }
 .idle-inner { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 14px; margin: auto; }
 
 .brand { text-align: center; margin-bottom: 8px; }
-.logo { filter: drop-shadow(0 12px 40px rgba(139, 123, 255, 0.55)); animation: float 5s ease-in-out infinite; }
+.logo { filter: drop-shadow(0 12px 40px rgba(139, 123, 255, 0.55)); }
 @keyframes float { 50% { transform: translateY(-5px); } }
 h1 { margin: 10px 0 4px; font-size: 34px; letter-spacing: -0.03em; font-weight: 750; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .tagline { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.45; }
@@ -78,8 +78,6 @@ h1 { margin: 10px 0 4px; font-size: 34px; letter-spacing: -0.03em; font-weight: 
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 14px 16px;
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
 }
 
 .card.link { display: flex; align-items: center; gap: 12px; }
@@ -88,7 +86,7 @@ h1 { margin: 10px 0 4px; font-size: 34px; letter-spacing: -0.03em; font-weight: 
 .card.link .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; box-shadow: 0 0 0 0 transparent; }
 .card.link[data-ok="yes"] .dot { background: var(--ok); box-shadow: 0 0 14px var(--ok); }
 .card.link[data-ok="no"] .dot { background: var(--bad); box-shadow: 0 0 14px var(--bad); }
-.card.link[data-ok="unknown"] .dot { animation: pulse 1.2s ease-in-out infinite; }
+.card.link[data-ok="unknown"] .dot { opacity: 0.5; }
 @keyframes pulse { 50% { opacity: 0.3; } }
 
 .options { display: flex; flex-direction: column; gap: 4px; padding: 6px 16px; }
@@ -139,6 +137,7 @@ h1 { margin: 10px 0 4px; font-size: 34px; letter-spacing: -0.03em; font-weight: 
 .spinner { width: 54px; height: 54px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.12); border-top-color: var(--accent-2); animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .err-ico { display: none; width: 56px; height: 56px; fill: none; stroke: var(--bad); stroke-width: 1.6; stroke-linecap: round; }
+#app:not([data-state="starting"]) .spinner { animation: none; }
 #app[data-state="error"] .spinner { display: none; }
 #app[data-state="error"] .err-ico { display: block; }
 .app .tips { display: none; }
@@ -158,14 +157,13 @@ h1 { margin: 10px 0 4px; font-size: 34px; letter-spacing: -0.03em; font-weight: 
 }
 .pill {
   display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; border-radius: 99px;
-  background: rgba(10, 11, 22, 0.55); border: 1px solid rgba(255, 255, 255, 0.14);
-  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  background: rgba(10, 11, 22, 0.74); border: 1px solid rgba(255, 255, 255, 0.14); /* no backdrop blur: it is recomputed on every video frame */
   font-size: 12.5px; letter-spacing: 0.02em; max-width: 100%;
 }
 .pill b { font-weight: 700; letter-spacing: 0.08em; font-size: 11.5px; white-space: nowrap; }
 .pill em { font-style: normal; color: rgba(255, 255, 255, 0.72); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pill.subtle { font-size: 12px; color: rgba(255, 255, 255, 0.8); }
-.rec { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 12px var(--bad); animation: pulse 1.4s ease-in-out infinite; flex: none; }
+.rec { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 12px var(--bad); flex: none; }
 #livePill[data-mode="reconnect"] .rec { background: var(--warn); box-shadow: 0 0 12px var(--warn); }
 
 .live-bar {
@@ -175,7 +173,7 @@ h1 { margin: 10px 0 4px; font-size: 34px; letter-spacing: -0.03em; font-weight: 
 .round {
   appearance: none; border: 1px solid rgba(255, 255, 255, 0.16); cursor: pointer; color: #fff;
   width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
-  background: rgba(20, 22, 40, 0.55); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  background: rgba(20, 22, 40, 0.78);
   transition: transform 0.12s, background 0.2s;
 }
 .round:active { transform: scale(0.92); }
@@ -201,7 +199,7 @@ h1 { margin: 10px 0 4px; font-size: 34px; letter-spacing: -0.03em; font-weight: 
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 @media (prefers-reduced-motion: reduce) {
-  .bg i, .logo { animation: none; }
+  .spinner { animation: none; }
 }
 
 /* ---------- lens sheet, screen light, standby ---------- */

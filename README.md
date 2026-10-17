@@ -71,7 +71,8 @@ Cela se fait à l’installation du PC (étape proposée) ou plus tard dans l’
 
 ### Économiser la batterie du téléphone
 
-- Désactiver la vidéo (ci-dessus) est le plus efficace.
+- Désactiver la vidéo (ci-dessus) est le plus efficace. En **micro seul**, l’écran du téléphone n’est plus forcé de rester allumé : il passe tout de suite à sa luminosité minimale puis s’éteint tout seul comme d’habitude (le micro continue, appli fermée ou écran verrouillé). Les verrous CPU / Wi-Fi ne sont tenus que pendant que le flux circule vraiment, et le verrou Wi-Fi uniquement pour la vidéo.
+- La page du téléphone **ne dessine plus rien d’animé ni de flouté** pendant la diffusion (un fond qui bouge en permanence empêchait le processeur graphique de se reposer) et, si le PC est injoignable, elle ne le relance plus en boucle : un simple test discret, de plus en plus espacé, puis arrêt au bout de 30 minutes.
 - **Mode économie** : 720p maximum, 24 images/s, débit réduit, écran du téléphone noir automatiquement après quelques secondes (la caméra continue).
 - **Encodage H.264** (par défaut) : utilise la puce vidéo du téléphone, bien plus sobre que le VP8 logiciel. Repasse tout seul en VP8 si le téléphone ne sait pas l’encoder.
 - Le bouton *lune* du téléphone coupe l’écran (pixels noirs, rétroéclairage au minimum) sans arrêter la caméra.

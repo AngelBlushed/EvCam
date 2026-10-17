@@ -64,6 +64,7 @@
     camWanted: true,             // the camera is wanted (not switched off by the user): brought back after a sleep
     thermal: { level: 0, tempC: null, status: 0 }, // 0 normal, 1 warm (720p30), 2 hot (480p24): set by checkThermal()
     thermalTimer: 0,
+    lostAt: 0,                   // when the PC was lost (reconnection attempts are spaced out, then given up)
     dimmed: false,               // screen at its lowest brightness after a while without touch
     camOff: false,               // the PC asked for microphone-only mode before the stream started
     eco: false,
@@ -102,6 +103,7 @@
 
   function setScreen(name, title, text) {
     app.dataset.state = name;
+    document.body.classList.toggle('streaming', name === 'live'); // nothing decorative is drawn while streaming
     if (title !== undefined) el.statusTitle.textContent = title;
     if (text !== undefined) el.statusText.textContent = text;
     el.retryBtn.hidden = name !== 'error';
@@ -437,6 +439,7 @@
       setLiveMode(liveModeNow());
     }
     el.camBtn.setAttribute('aria-pressed', String(state.standby));
+    applyKeepAwake();
     sendState();
   }
 
@@ -595,27 +598,54 @@
     const s = pc.connectionState;
     if (s === 'connected') {
       state.attempts = 0;
+      state.lostAt = 0;
       clearTimeout(state.dropTimer);
       setLiveMode('live');
+      reportLive();
     } else if (s === 'disconnected') {
       setLiveMode('reconnect');
+      reportLive();
       clearTimeout(state.dropTimer);
       state.dropTimer = setTimeout(() => {
         if (state.pc === pc && pc.connectionState !== 'connected') reconnect();
       }, 3000);
     } else if (s === 'failed' || s === 'closed') {
       setLiveMode('reconnect');
+      reportLive();
       reconnect();
+    }
+  }
+
+  /** One tiny request: is the PC there? (no peer connection, no ICE gathering, no radio burst when it is not) */
+  async function pcReachable() {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 3500);
+    try {
+      const res = await fetch(`/api/info?t=${encodeURIComponent(state.token)}`, { cache: 'no-store', signal: ctl.signal });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
   async function reconnect() {
     if (state.userStopped || state.reconnecting || !state.stream) return;
     state.reconnecting = true;
+    if (!state.lostAt) state.lostAt = Date.now();
     setLiveMode('reconnect');
     try {
       while (!state.userStopped) {
         state.attempts++;
+        if (!(await pcReachable())) {
+          const lostFor = Date.now() - state.lostAt;
+          if (lostFor > 30 * 60 * 1000) {
+            return fail('Le PC est resté injoignable pendant 30 minutes : la diffusion est arrêtée pour économiser la batterie.\nOuvrez EvCam sur le PC puis touchez Réessayer.');
+          }
+          await sleep(lostFor > 5 * 60 * 1000 ? 60000 : Math.min(2000 * state.attempts, 30000));
+          continue;
+        }
         try {
           await connect();
           return;
@@ -788,12 +818,32 @@
   // ---------------------------------------------------------------------------
 
   async function requestWake() {
+    if (state.standby) return; // microphone only: the screen may switch off
     try {
       if ('wakeLock' in navigator && !state.wake) {
         state.wake = await navigator.wakeLock.request('screen');
         state.wake.addEventListener('release', () => { state.wake = null; });
       }
     } catch { /* not allowed (low battery, etc.) */ }
+  }
+
+  /**
+   * The screen only has to stay on while the CAMERA runs. In microphone-only mode Android may switch it off by itself
+   * (the foreground service keeps the microphone going), which is what makes the battery last: until then the
+   * backlight sits at its minimum.
+   */
+  function applyKeepAwake() {
+    const cameraRuns = state.running && !state.standby;
+    native((n) => { if (typeof n.setKeepScreenOn === 'function') n.setKeepScreenOn(cameraRuns); });
+    if (cameraRuns) requestWake(); else releaseWake();
+    if (NATIVE && state.running) autoDim(!cameraRuns);
+    reportLive();
+  }
+
+  /** Tells the Android service whether the stream really flows (and carries video): it holds CPU / Wi-Fi locks only then. */
+  function reportLive() {
+    const live = !!state.pc && state.pc.connectionState === 'connected';
+    native((n) => { if (typeof n.setLive === 'function') n.setLive(live, live && !state.standby); });
   }
 
   function releaseWake() {
@@ -803,7 +853,7 @@
 
   async function pollStats() {
     const pc = state.pc;
-    if (!pc || pc.connectionState !== 'connected') return;
+    if (!pc || pc.connectionState !== 'connected' || document.visibilityState !== 'visible' || state.standby || state.dimmed) return;
     try {
       const report = await pc.getStats();
       let out = null;
@@ -837,7 +887,7 @@
   }
 
   async function checkThermal() {
-    if (!NATIVE || typeof NATIVE.thermal !== 'function' || !state.running) return;
+    if (!NATIVE || typeof NATIVE.thermal !== 'function' || !state.running || state.standby) return; // no camera, no heat
     let info;
     try { info = JSON.parse(NATIVE.thermal() || '{}'); } catch { return; }
     const t = Number(info.tempC);
@@ -902,7 +952,8 @@
     state.torch = false;
     state.screenLight = false;
     state.videoSender = null;
-    native((n) => { n.setStreaming(false); n.setDim(false); n.setBrightness(-1); });
+    state.lostAt = 0;
+    native((n) => { n.setStreaming(false); n.setDim(false); n.setBrightness(-1); if (typeof n.setKeepScreenOn === 'function') n.setKeepScreenOn(false); });
   }
 
   async function start() {
@@ -946,7 +997,7 @@
     native((n) => n.setStreaming(true));
     // keep streaming with the screen off: once, ask Android not to restrict EvCam in the background
     native((n) => { if (n.askBatteryExemption) n.askBatteryExemption(); });
-    requestWake();
+    applyKeepAwake();
     clearInterval(state.statsTimer);
     state.statsTimer = setInterval(pollStats, 2000);
   }
@@ -997,7 +1048,7 @@
       el.linkTitle.textContent = 'PC injoignable';
       el.linkSub.textContent = 'EvCam est-il ouvert ? Même Wi-Fi ?';
     }
-    linkTimer = setTimeout(checkLink, 4000);
+    linkTimer = setTimeout(checkLink, document.visibilityState === 'hidden' ? 30000 : APP ? 8000 : 4000);
   }
 
   // ---------------------------------------------------------------------------
@@ -1069,10 +1120,11 @@
         await setStandby(true, 'sleep');
       }
     }
-    bgTimer = setTimeout(checkBackground, 8000);
+    if (!state.standby) bgTimer = setTimeout(checkBackground, 8000);
   }
 
   document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && app.dataset.state === 'idle') checkLink(); // idle screen: look again as soon as it is shown
     if (!state.running || state.userStopped) return;
     if (document.visibilityState === 'hidden') {
       clearTimeout(bgTimer);

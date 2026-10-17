@@ -195,6 +195,7 @@ public class MainActivity extends Activity {
     private void showHome(String state) {
         web.stopLoading();
         setStreaming(false);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); // the pairing / scanning screen stays lit
         String hash;
         if (state == null || state.isEmpty()) hash = "";
         else if ("pair".equals(state)) hash = "#pair";
@@ -248,8 +249,13 @@ public class MainActivity extends Activity {
     // ------------------------------------------------------------------ keep streaming in the background
 
     private void setStreaming(boolean on) {
+        setStreaming(on, true, true);
+    }
+
+    /** Starts / updates the foreground service; {@code live} and {@code video} decide which power locks it holds. */
+    private void setStreaming(boolean on, boolean live, boolean video) {
         try {
-            Intent service = new Intent(this, StreamService.class);
+            Intent service = new Intent(this, StreamService.class).putExtra("live", live).putExtra("video", video);
             if (on) {
                 if (!hasRuntimePermissions()) return;
                 if (Build.VERSION.SDK_INT >= 26) startForegroundService(service);
@@ -473,6 +479,26 @@ public class MainActivity extends Activity {
         public void setStreaming(final boolean on) {
             if (!trusted()) return;
             runOnUiThread(() -> MainActivity.this.setStreaming(on));
+        }
+
+        /** The stream is (not) really flowing / carries video: the service holds its CPU and Wi-Fi locks accordingly. */
+        @JavascriptInterface
+        public void setLive(final boolean live, final boolean video) {
+            if (!trusted()) return;
+            runOnUiThread(() -> MainActivity.this.setStreaming(true, live, video));
+        }
+
+        /**
+         * The screen only needs to stay on while the camera runs. In microphone-only mode Android may switch it off by
+         * itself (the foreground service keeps the microphone going): that is what makes the battery last.
+         */
+        @JavascriptInterface
+        public void setKeepScreenOn(final boolean on) {
+            if (!trusted()) return;
+            runOnUiThread(() -> {
+                if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            });
         }
 
         /**

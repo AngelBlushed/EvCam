@@ -62,23 +62,40 @@ public class StreamService extends Service {
             return START_NOT_STICKY;
         }
 
+        // the page says whether the stream is really live and whether it carries video
+        boolean live = intent == null || intent.getBooleanExtra("live", true);
+        boolean video = intent == null || intent.getBooleanExtra("video", true);
+        applyLocks(live, video);
+        return START_NOT_STICKY;
+    }
+
+    /**
+     * CPU and Wi-Fi locks only while the stream is really live. While the PC cannot be reached the phone may sleep
+     * (the page retries gently). The Wi-Fi lock is only worth its power for VIDEO: a microphone-only stream already
+     * sends a packet every 20 ms, which keeps the radio awake by itself.
+     */
+    private void applyLocks(boolean live, boolean video) {
         try {
-            if (wakeLock == null) {
+            if (live && wakeLock == null) {
                 PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
                 wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "evcam:stream");
                 wakeLock.acquire();
+            } else if (!live && wakeLock != null) {
+                if (wakeLock.isHeld()) wakeLock.release();
+                wakeLock = null;
             }
-            if (wifiLock == null) {
-                // one lock only: the radio stays awake with the screen off. The "low latency" lock was dropped: it
-                // forces the radio to its highest power state for no benefit while a video stream already keeps it busy
+            boolean wantWifi = live && video;
+            if (wantWifi && wifiLock == null) {
                 WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
                 wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "evcam:wifi");
                 wifiLock.acquire();
+            } else if (!wantWifi && wifiLock != null) {
+                if (wifiLock.isHeld()) wifiLock.release();
+                wifiLock = null;
             }
         } catch (Exception ignored) {
             // locks are an optimisation only
         }
-        return START_NOT_STICKY;
     }
 
     @Override
