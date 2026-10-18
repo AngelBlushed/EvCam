@@ -78,6 +78,8 @@ Cela se fait à l’installation du PC (étape proposée) ou plus tard dans l’
 - Le bouton *lune* du téléphone coupe l’écran (pixels noirs, rétroéclairage au minimum) sans arrêter la caméra.
 - EvCam affiche la **batterie du téléphone**, une **autonomie estimée** (une fois débranché) et vous prévient à 20 % et 10 %.
 - **Protection contre la chauffe** (appli Android) : EvCam surveille la température et l’état thermique du téléphone ; s’il chauffe, il baisse tout seul la qualité (720p / 30 i/s, puis 480p / 24 i/s) et la rétablit une fois refroidi. Un message l’indique sur le PC.
+- **Encodeur logiciel détecté** : si le téléphone encode la vidéo avec son processeur (VP8, ou un H.264 logiciel) au lieu de sa puce vidéo, EvCam le voit (carte *Batterie du téléphone* → « Encodeur du téléphone ») et limite tout seul à 720p / 30 i/s : en 1080p / 60 un encodeur logiciel fait surchauffer le téléphone.
+- **Mises à jour** : EvCam regarde une fois par jour s’il existe une version plus récente sur GitHub et l’indique par une pastille en haut de la fenêtre (désactivable dans *Réglages → Prévenir des mises à jour*). **Mettez à jour le PC *et* l’appli Android** : la page affichée sur le téléphone est servie par le PC.
 - **Écran qui s’assombrit tout seul** : sans toucher le téléphone, la luminosité tombe au minimum après 25 secondes (un écran lumineux fait beaucoup chauffer) ; un toucher la rétablit.
 - Les débits demandés au téléphone sont modérés (≈ 10 Mb/s en 1080p / 60, ≈ 5 Mb/s en 1080p / 30) : l’encodeur et le Wi-Fi du téléphone chauffent moins. Préférez **30 images/s**, c’est deux fois moins de travail que 60.
 

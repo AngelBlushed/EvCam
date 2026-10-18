@@ -64,6 +64,9 @@
     camWanted: true,             // the camera is wanted (not switched off by the user): brought back after a sleep
     thermal: { level: 0, tempC: null, status: 0 }, // 0 normal, 1 warm (720p30), 2 hot (480p24): set by checkThermal()
     thermalTimer: 0,
+    encoder: '',                 // outbound-rtp encoderImplementation, e.g. "libvpx" or a MediaCodec name
+    encoderHw: null,             // true hardware, false software, null unknown
+    encoderTimer: 0,
     lostAt: 0,                   // when the PC was lost (reconnection attempts are spaced out, then given up)
     dimmed: false,               // screen at its lowest brightness after a while without touch
     camOff: false,               // the PC asked for microphone-only mode before the stream started
@@ -686,6 +689,8 @@
       standbyReason: state.standbyReason,
       thermal: state.thermal.level,
       tempC: state.thermal.tempC,
+      encoder: state.encoder,
+      encoderHw: state.encoderHw,
       codec: state.cfg.codec,
       battery: b ? Math.round(b.level * 100) : null,
       charging: b ? !!b.charging : null
@@ -909,6 +914,28 @@
     sendState();
   }
 
+  /** Which encoder produces the video? A software encoder is what makes a phone boiling hot: the PC then limits the quality. */
+  async function checkEncoder() {
+    const pc = state.pc;
+    if (!pc || pc.connectionState !== 'connected' || state.standby) return;
+    try {
+      const report = await pc.getStats();
+      let out = null;
+      report.forEach((r) => { if (r.type === 'outbound-rtp' && (r.kind === 'video' || r.mediaType === 'video') && r.framesEncoded > 0) out = r; });
+      if (!out) return;
+      const impl = String(out.encoderImplementation || '');
+      const hw = typeof out.powerEfficientEncoder === 'boolean'
+        ? out.powerEfficientEncoder
+        : (impl ? !/libvpx|openh264|software|\bvp8\b|simulcast/i.test(impl) : null);
+      if (impl !== state.encoder || hw !== state.encoderHw) {
+        state.encoder = impl;
+        state.encoderHw = hw;
+        dbg('encoder', impl, hw);
+        sendState();
+      }
+    } catch { /* optional */ }
+  }
+
   function updateBattery() {
     const b = state.battery;
     if (!b) return;
@@ -940,6 +967,9 @@
     el.sheet.hidden = true;
     clearTimeout(ecoTimer);
     clearInterval(state.thermalTimer);
+    clearInterval(state.encoderTimer);
+    state.encoder = '';
+    state.encoderHw = null;
     state.thermal = { level: 0, tempC: null, status: 0 };
     state.dimmed = false;
     el.preview.style.visibility = '';
@@ -991,6 +1021,9 @@
     clearInterval(state.thermalTimer);
     state.thermalTimer = setInterval(checkThermal, THERMAL_MS);
     setTimeout(checkThermal, Math.min(3000, THERMAL_MS));
+    clearInterval(state.encoderTimer);
+    state.encoderTimer = setInterval(checkEncoder, 20000);
+    setTimeout(checkEncoder, 6000);
     scheduleEcoBlackout();
     setLiveMode('live');
     setScreen('live');

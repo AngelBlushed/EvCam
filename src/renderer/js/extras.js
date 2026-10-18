@@ -169,6 +169,15 @@ class Extras {
     const badge = $('#powerBadge');
     badge.dataset.tone = standby ? 'info' : eco ? 'ok' : 'muted';
     badge.textContent = standby ? 'Micro seul' : eco ? 'Économie' : 'Normal';
+    const encoder = $('#encoderInfo');
+    const showEncoder = engine.live && !standby && !!engine.phone.encoder;
+    encoder.hidden = !showEncoder;
+    if (showEncoder) {
+      const hw = engine.phone.encoderHw;
+      encoder.textContent = hw === false
+        ? `Encodeur du téléphone : logiciel (${engine.phone.encoder}). Il chauffe beaucoup : qualité limitée à 720p / 30 i/s.`
+        : hw === true ? `Encodeur du téléphone : matériel (${engine.phone.encoder}).` : `Encodeur du téléphone : ${engine.phone.encoder}.`;
+    }
     $('#powerSub').textContent = engine.live && engine.phone.battery != null
       ? `${this.batteryText()}`
       : 'Réduit la consommation du téléphone';

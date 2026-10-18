@@ -16,10 +16,16 @@ function targetBitrate(quality, fps, factor = 0.08) {
 }
 
 /** Quality / frame rate / bitrate really used: the battery saver caps them (720p, 24 fps, lighter bitrate). */
-function effectiveCamera(settings) {
+function effectiveCamera(settings, softEncoder = false) {
   let { quality, fps } = settings.camera;
   // bits per pixel and frame: a phone's hardware encoder + the Wi-Fi radio are what make it hot, so stay modest
   let factor = 0.08;
+  // VP8 (or any software encoder) runs on the phone's CPU: 1080p / 60 would make it boiling hot, so stay at 720p / 30
+  if (softEncoder || (settings.power && settings.power.codec === 'vp8')) {
+    if (quality === '1080p') quality = '720p';
+    fps = Math.min(fps, 30);
+    factor = 0.1;
+  }
   if (settings.power && settings.power.eco) {
     if (quality === '1080p') quality = '720p';
     fps = Math.min(fps, 24);

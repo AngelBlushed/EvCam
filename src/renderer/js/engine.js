@@ -25,6 +25,26 @@ function waitIce(pc, ms = 2500) {
  * compositor (video) and the audio bridge (audio). Also drives the phone through
  * a data channel (camera, quality, torch, mute...).
  */
+/**
+ * Ceiling for the phone's video encoder ("b=AS" in our answer: the sender must stay under it, whatever its own
+ * settings say). A phone's hardware encoder was seen sending 21 Mb/s: that is what heats the phone and the radio.
+ * 12.5 Mb/s is a bit above the most the app ever asks for (1080p / 60, about 10 Mb/s).
+ */
+const MAX_VIDEO_KBPS = 12500;
+
+function capVideoBitrate(sdp, kbps) {
+  const lines = sdp.split('\r\n');
+  const out = [];
+  let inVideo = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('m=')) inVideo = line.startsWith('m=video');
+    out.push(line);
+    if (inVideo && line.startsWith('c=') && !(lines[i + 1] || '').startsWith('b=')) out.push(`b=AS:${kbps}`);
+  }
+  return out.join('\r\n');
+}
+
 class Engine extends EventTarget {
   constructor({ compositor, audio, getSettings }) {
     super();
@@ -37,7 +57,7 @@ class Engine extends EventTarget {
     this.device = '';
     this.phone = {
       facing: 'user', hasMic: true, micMuted: false, torch: false, torchSupported: false, torchMode: 'torch',
-      zoom: { supported: false, min: 1, max: 1, value: 1 }, lensId: '', lenses: [], standby: false, standbyReason: '', thermal: 0, tempC: null, codec: '',
+      zoom: { supported: false, min: 1, max: 1, value: 1 }, lensId: '', lenses: [], standby: false, standbyReason: '', thermal: 0, tempC: null, encoder: '', encoderHw: null, codec: '',
       battery: null, charging: null
     };
     this.batteryLog = [];
@@ -71,6 +91,8 @@ class Engine extends EventTarget {
     this.phone.standby = false;
     this.phone.standbyReason = '';
     this.phone.thermal = 0;
+    this.phone.encoder = '';
+    this.phone.encoderHw = null;
     this._setStatus('connecting');
 
     pc.ontrack = (event) => this._onTrack(session, event);
@@ -81,7 +103,7 @@ class Engine extends EventTarget {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     await waitIce(pc);
-    return { type: 'answer', sdp: pc.localDescription.sdp };
+    return { type: 'answer', sdp: capVideoBitrate(pc.localDescription.sdp, MAX_VIDEO_KBPS) };
   }
 
   _onTrack(session, { track, receiver, streams }) {
@@ -104,10 +126,15 @@ class Engine extends EventTarget {
       try { msg = JSON.parse(event.data); } catch { return; }
       if (msg.t === 'hello' || msg.t === 'state') {
         if (msg.device) { session.device = msg.device; this.device = msg.device; }
-        for (const key of ['facing', 'hasMic', 'micMuted', 'torch', 'torchSupported', 'torchMode', 'zoom', 'lensId', 'lenses', 'standby', 'standbyReason', 'thermal', 'tempC', 'codec', 'battery', 'charging']) {
+        const prevHw = this.phone.encoderHw;
+        for (const key of ['facing', 'hasMic', 'micMuted', 'torch', 'torchSupported', 'torchMode', 'zoom', 'lensId', 'lenses', 'standby', 'standbyReason', 'thermal', 'tempC', 'encoder', 'encoderHw', 'codec', 'battery', 'charging']) {
           if (msg[key] !== undefined) this.phone[key] = msg[key];
         }
+        if (this.phone.encoderHw !== prevHw) this.dispatchEvent(new CustomEvent('phone-encoder'));
         if (msg.battery != null) this._logBattery(msg.battery, !!msg.charging);
+        // the camera just started delivering: the health clock restarts here
+        if (msg.t === 'state' && msg.standby === false && this._wasStandby) this._camOnAt = performance.now();
+        if (msg.standby !== undefined) this._wasStandby = !!msg.standby;
         // the camera was switched on/off from the phone: mirror it in the PC setting (ignore echoes of our own command)
         // (a standby caused by the phone's screen being off is not a choice: the setting is left alone)
         if (msg.t === 'state' && typeof msg.standby === 'boolean' && msg.standbyReason !== 'sleep' && performance.now() - this._cfgSentAt > 2500 &&
@@ -153,8 +180,9 @@ class Engine extends EventTarget {
     clearTimeout(this._cfgTimer);
     const run = () => {
       const s = this.getSettings();
-      const eff = effectiveCamera(s); // the battery saver caps resolution, frame rate and bitrate
+      const eff = effectiveCamera(s, this.phone.encoderHw === false); // battery saver / software encoder cap resolution, frame rate and bitrate
       if (s.camera.enabled && this.phone.standby) this.wakeAt = performance.now();
+      if (!s.camera.enabled) this._camOnAt = 0;
       this._cfgSentAt = performance.now();
       this.send({
         t: 'config',
@@ -196,8 +224,10 @@ class Engine extends EventTarget {
   /** H.264 negotiated but nothing arrives: tell the app to fall back to VP8 (once per session). */
   _checkHealth(session) {
     if (!session.liveAt || session.fellBack || this.phone.standby) return;
-    if (performance.now() - session.liveAt < 7000) return;
-    const noFrames = this.compositor.lastFrameAt < session.liveAt;
+    // count from the moment the camera was (re)started: a session that began without camera has no picture yet
+    const since = Math.max(session.liveAt, this.wakeAt || 0, this._camOnAt || 0);
+    if (performance.now() - since < 9000) return;
+    const noFrames = this.compositor.lastFrameAt < since;
     if (noFrames && this.getSettings().power.codec === 'h264') {
       session.fellBack = true;
       this.dispatchEvent(new CustomEvent('codec-fallback'));

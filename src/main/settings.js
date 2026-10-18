@@ -15,7 +15,9 @@ const DEFAULTS = {
   autoStart: false,
   startMinimized: true,
   closeAction: 'ask',     // the window's cross: 'ask' (minimise or quit?) | 'tray' | 'quit'
+  checkUpdates: true,     // look (once a day) for a newer release on GitHub and say so in the window
   firstRunDone: false,
+  settingsVersion: 2,     // 2: H.264 given back once (a wrong "H.264 does not work" verdict used to be saved for good)
   camera: {
     enabled: true,        // false = microphone only: the phone camera is switched off
     dezoom: 0,            // 0..90 %: shrink the picture inside the frame (digital zoom-out)
@@ -99,6 +101,7 @@ class Settings extends EventEmitter {
       merge(data, saved);
       // before 1.4 the cross was a simple on/off ("minimise to tray"): keep an explicit "quit" choice
       if (saved.closeAction === undefined && saved.closeToTray === false) data.closeAction = 'quit';
+      if ((saved.settingsVersion || 1) < 2) { data.power.codec = 'h264'; data.settingsVersion = 2; }
     } catch { /* first run or corrupt file: use defaults */ }
     return sanitize(data);
   }

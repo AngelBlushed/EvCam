@@ -32,6 +32,7 @@ const firewall = require('./firewall');
 const discord = require('./discord');
 const audioDefault = require('./audioDefault');
 const micInstaller = require('./micInstaller');
+const updates = require('./update');
 const { createVirtualMic } = require('./virtualMic');
 
 const APP_ID = 'com.evcam.app';
@@ -56,6 +57,7 @@ let addresses = [];
 let firewallOk = null; // null = unknown
 let liveState = { live: false, device: '', camInUse: false };
 let powerBlockId = null;
+let updateInfo = null;    // { version, url } when a newer release exists
 let certFingerprint = ''; // SHA-256 of the HTTPS certificate (hex), pinned by the Android app
 
 const pending = new Map();
@@ -301,12 +303,26 @@ async function updateSettings(patch) {
   const portChanged = patch.port !== undefined && patch.port !== before.port;
   const next = settings.patch(patch);
   if (patch.autoStart !== undefined) applyAutoStart(next.autoStart);
+  if (patch.checkUpdates === true) checkForUpdate();
   if (portChanged) {
     try { await startServer(); } catch (err) { console.error('[evcam] restart server failed:', err.message); }
   }
   send('settings:changed', { settings: next, connection: connectionInfo() });
   refreshTray();
   return next;
+}
+
+/** A newer release on GitHub? (one small request; never in the developer test profile unless faked) */
+async function checkForUpdate() {
+  if (!settings || !settings.get().checkUpdates) return;
+  let latest = null;
+  if (process.env.EVCAM_TEST_PROFILE) {
+    if (process.env.EVCAM_TEST_UPDATE) latest = { version: process.env.EVCAM_TEST_UPDATE, url: 'https://github.com/AngelBlushed/EvCam/releases/latest' };
+  } else {
+    latest = await updates.latest();
+  }
+  updateInfo = latest && updates.isNewer(latest.version, app.getVersion()) ? latest : null;
+  send('update:available', updateInfo);
 }
 
 async function buildState() {
@@ -321,7 +337,8 @@ async function buildState() {
     firewallOk,
     exePath: process.execPath,
     userDataPath: app.getPath('userData'),
-    testProfile: !!process.env.EVCAM_TEST_PROFILE
+    testProfile: !!process.env.EVCAM_TEST_PROFILE,
+    update: updateInfo
   };
 }
 
@@ -443,6 +460,8 @@ app.whenReady().then(async () => {
     console.error('[evcam] cannot start server:', err);
   }
   watchNetwork();
+  setTimeout(checkForUpdate, 20000).unref();
+  setInterval(checkForUpdate, 12 * 3600 * 1000).unref();
 
   createWindow();
   createTray();

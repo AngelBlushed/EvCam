@@ -20,7 +20,7 @@ async function main() {
   ui.init();
 
   const applyCamera = () => {
-    const eff = effectiveCamera(store.settings); // battery saver may lower resolution / frame rate
+    const eff = effectiveCamera(store.settings, engine.phone.encoderHw === false); // battery saver / software encoder may lower resolution / frame rate
     compositor.configure({ w: eff.size.w, h: eff.size.h, fps: eff.fps });
   };
   const applyAudio = () => audio.configure({
@@ -41,11 +41,13 @@ async function main() {
   store.onChange((path) => {
     if (path === 'camera.quality' || path === 'camera.fps' || path === 'camera.wide' || path === 'power.eco') { applyCamera(); engine.pushConfig(); }
     else if (path === 'camera.enabled') engine.pushConfig(true);
-    else if (path === 'power.codec') engine.pushConfig();
+    else if (path === 'power.codec') { applyCamera(); engine.pushConfig(); }
     else if (path === 'phone.facing' || path === 'phone.noiseSuppression') engine.pushConfig();
     else if (path.startsWith('audio.')) applyAudio();
   });
   engine.addEventListener('phone-facing', (e) => store.set('phone.facing', e.detail));
+  // the phone told us its video encoder is software (it would overheat at 1080p / 60): lower the quality asked from it
+  engine.addEventListener('phone-encoder', () => { applyCamera(); engine.pushConfig(); });
   engine.addEventListener('codec-fallback', () => {
     store.set('power.codec', 'vp8');
     ui.toast('L’encodage matériel H.264 ne fonctionne pas sur ce téléphone : passage en VP8.', 'warn', 'alert');
@@ -85,6 +87,8 @@ async function main() {
   });
   ipcRenderer.on('firewall:changed', (_e, ok) => ui.setFirewall(ok));
   ipcRenderer.on('app:visible', (_e, visible) => ui.setWindowVisible(visible));
+  ipcRenderer.on('update:available', (_e, info) => ui.setUpdate(info));
+  ui.setUpdate(store.info.update);
 
   // ---- tray / main-process status --------------------------------------------------
   const report = () => ipcRenderer.send('status:report', { live: engine.live, device: engine.device, camInUse: compositor.consumer });

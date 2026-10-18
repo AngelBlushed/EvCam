@@ -20,6 +20,7 @@
       <div class="status-pill" id="statusPill" data-state="idle">
         <span class="dot"></span><span id="statusLabel">En attente du téléphone</span>
       </div>
+      <button class="update-pill" id="updatePill" type="button" hidden><i data-ic="external"></i><span id="updateText">Mise à jour disponible</span></button>
       <div class="top-spacer"></div>
     </header>
 
@@ -228,6 +229,7 @@
                   <button type="button" data-value="vp8">VP8 compatible</button>
                 </div>
                 <small>H.264 utilise la puce vidéo du téléphone : bien moins de batterie. Repasse seul en VP8 si besoin.</small>
+                <small id="encoderInfo" hidden></small>
               </div>
             </div>
 
@@ -347,6 +349,10 @@
                   <button type="button" data-value="quit">Fermer</button>
                 </div>
                 <small>« Demander » propose de réduire EvCam près de l’horloge ou de le fermer complètement.</small>
+              </div>
+              <div class="field row">
+                <div><label>Prévenir des mises à jour</label><small>EvCam regarde la page des versions sur GitHub (une demande discrète par jour, rien n’est envoyé) et vous le dit ici.</small></div>
+                <label class="switch"><input type="checkbox" data-setting="checkUpdates"><span></span></label>
               </div>
             </div>
 

@@ -552,7 +552,19 @@ class UI {
     }
   }
 
+  /** A newer release exists (or none): show / hide the pill in the top bar. */
+  setUpdate(info) {
+    const pill = $('#updatePill');
+    if (!info) { pill.hidden = true; return; }
+    $('#updateText').textContent = `Mise à jour ${info.version} disponible`;
+    pill.title = `Vous utilisez EvCam ${this.store.info.version}. Cliquez pour télécharger la ${info.version}.`;
+    pill.onclick = () => ipcRenderer.invoke('open:external', info.url);
+    if (pill.hidden) this.toast(`EvCam ${info.version} est disponible : installez-la (PC et appli Android) pour profiter des derniers correctifs.`, 'info', 'info');
+    pill.hidden = false;
+  }
+
   _updateVisibility() {
+    document.body.classList.toggle('paused', this.windowVisible === false);
     this.compositor.previewVisible = this.mode !== 'empty' && this.windowVisible !== false && document.visibilityState === 'visible';
   }
 
