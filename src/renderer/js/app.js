@@ -21,7 +21,10 @@ async function main() {
 
   const applyCamera = () => {
     const eff = effectiveCamera(store.settings, engine.phone.encoderHw === false); // battery saver / software encoder may lower resolution / frame rate
-    compositor.configure({ w: eff.size.w, h: eff.size.h, fps: eff.fps });
+    // with smoothing on, the missing frames are computed here: the output keeps the rate that was chosen
+    // while the phone only films / encodes (and heats) at the lower rate it can sustain
+    const out = store.get('camera.smooth') === 'auto' ? Math.max(eff.fps, eff.asked) : eff.fps;
+    compositor.configure({ w: eff.size.w, h: eff.size.h, fps: out });
   };
   const applyAudio = () => audio.configure({
     enabled: store.get('audio.enabled'),
@@ -31,16 +34,24 @@ async function main() {
     monitor: store.get('audio.monitor')
   });
 
+  const applySmooth = () => compositor.setSmoothing(store.get('camera.smooth') === 'auto');
+  compositor.addEventListener('smooth-error', () => {
+    store.set('camera.smooth', 'off');
+    ui.toast('Le lissage des images n’est pas disponible sur ce PC (WebGL).', 'warn', 'alert');
+  });
+
   applyCamera();
   applyAudio();
+  applySmooth();
   // test profile (EVCAM_TEST_PROFILE=1, developer only): never touch the real virtual camera of an installed EvCam
   compositor.start(info.testProfile ? '' : info.vcam.dllPath);
   ui.renderAll();
 
   // ---- settings reactions ------------------------------------------------------
   store.onChange((path) => {
-    if (path === 'camera.quality' || path === 'camera.fps' || path === 'camera.wide' || path === 'power.eco') { applyCamera(); engine.pushConfig(); }
+    if (path === 'camera.quality' || path === 'camera.fps' || path === 'camera.wide' || path === 'camera.force' || path === 'power.eco') { applyCamera(); engine.pushConfig(); }
     else if (path === 'camera.enabled') engine.pushConfig(true);
+    else if (path === 'camera.smooth') { applyCamera(); applySmooth(); }
     else if (path === 'power.codec') { applyCamera(); engine.pushConfig(); }
     else if (path === 'phone.facing' || path === 'phone.noiseSuppression') engine.pushConfig();
     else if (path.startsWith('audio.')) applyAudio();

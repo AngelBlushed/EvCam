@@ -63,11 +63,25 @@ Windows ne permet pas à une application de créer un périphérique audio sans 
 
 Cela se fait à l’installation du PC (étape proposée) ou plus tard dans l’onglet *Micro* → **Installer le micro virtuel**. Si VB-CABLE est déjà installé, **Créer le micro « EvCam Micro »** se contente de renommer ses deux extrémités. C’est réversible (**Rétablir le nom d’origine**) et ne change **jamais** votre micro par défaut. Si un autre logiciel (Voicemeeter, OBS…) utilise ce câble par son nom, rétablissez le nom d’origine.
 
-### Objectif, dézoom et flash
+### Objectif, zoom et flash
 
-- **Objectif / zoom** : dans *Caméra → Objectif, dézoom et flash*, choisissez le zoom **0,5×** (si le téléphone le permet) ou un autre **objectif** dans la liste. Le bouton cercle de l’aperçu lance le **Dézoom maximal**.
-- **Dézoom maximal** = capteur **4:3 entier** (plus de décor en hauteur qu’en 16:9) + zoom minimal du téléphone + **dézoom numérique** (l’image est réduite jusqu’à 90 % dans le cadre, le tour étant rempli en flou, en miroir ou en noir). Le dézoom numérique **ne montre pas plus de décor** que l’objectif ne voit ; la vraie ultra grand-angle dépend de ce que le navigateur / la WebView du téléphone expose.
+- **Objectif / zoom du téléphone** : dans *Caméra → Objectif, dézoom et flash*, choisissez le zoom **0,5×** (si le téléphone le permet) ou un autre **objectif** dans la liste. Le bouton cercle de l’aperçu lance le **Dézoom maximal**. Le zoom du téléphone (×2, ×3…) est le plus net : il utilise le capteur.
+- **Zoom numérique** (de **0,25× à 4×**, 1× au milieu du curseur) : à gauche de 1× l’image est réduite dans le cadre (le tour est rempli en flou, en miroir ou en noir) ; à droite elle est **rapprochée** et les bords sont rognés. **Sur l’aperçu : molette = zoom, glisser = déplacer le cadrage** (pour choisir la partie de l’image selon l’angle de la caméra), **double-clic = recentrer**. Boutons *Recentrer l’image* et *Zoom 1×*. Le zoom numérique agrandit l’image reçue : il est moins net que le zoom du téléphone.
+- **Dézoom maximal** = capteur **4:3 entier** (plus de décor en hauteur qu’en 16:9) + zoom minimal du téléphone + zoom numérique à 0,65×. Le dézoom numérique **ne montre pas plus de décor** que l’objectif ne voit ; la vraie ultra grand-angle dépend de ce que le navigateur / la WebView du téléphone expose.
 - **Flash** : lampe du téléphone sur la caméra arrière ; sur la caméra avant (sans flash), l’écran devient une lumière d’appoint blanche à pleine luminosité. Si le navigateur ne propose pas la lampe, l’appli Android essaie l’API native.
+
+### Fluidité (images par seconde)
+
+La carte **Fluidité** (onglet *Caméra*) compare ce qui a été demandé (24, 30 ou 60 i/s) avec ce qui arrive réellement, étape par étape : **ce que la caméra du téléphone produit**, ce qui est **reçu par le PC**, ce qui sort d’EvCam. Elle dit **qui limite** :
+
+- **la caméra du téléphone** (souvent une pièce sombre : la caméra pose plus longtemps et tombe à 20 i/s) : EvCam essaie d’abord de **lui imposer la cadence**, puis de **baisser la résolution** (beaucoup de téléphones filment à 60 i/s en 720p mais pas en 1080p) ; si rien n’y fait, il le dit ;
+- **EvCam lui-même** : avec un encodeur **logiciel** (ou VP8, ou le mode économie) la cadence est plafonnée à 30 (24) i/s pour ne pas faire chauffer le téléphone ;
+- **l’encodeur du téléphone**, **le Wi-Fi**, **ce PC**, ou **la chaleur** (protection anti-chauffe).
+
+Quand le téléphone ne tient pas la cadence, EvCam **propose** :
+
+- **Le lissage** (post-traitement, *Proposer / Automatique / Désactivé*) : le PC **calcule les images manquantes** (interpolation du mouvement) pour une sortie régulière à la cadence choisie, par exemple 30 → 60 i/s. Le téléphone reste à la cadence qu’il tient (donc au frais). Il ajoute **environ une image de retard** (décalez le son dans l’onglet *Micro* si besoin), demande WebGL 2, et là où le mouvement est trop rapide ou ambigu il garde l’image réelle la plus proche (jamais d’image « baveuse »). Il **ne retire pas le flou de bougé** d’une caméra qui pose longtemps.
+- **Forcer les images par seconde** : exige la cadence de la caméra du téléphone, supprime le plafond « encodeur logiciel » et préfère la fluidité à la netteté (la résolution baisse avant les images par seconde). **La protection anti-chauffe reste active** : si le téléphone chauffe, il baisse la qualité de lui-même (720p/30 puis 480p/24).
 
 ### Économiser la batterie du téléphone
 
@@ -102,7 +116,8 @@ Cela se fait à l’installation du PC (étape proposée) ou plus tard dans l’
 | Application de caméra Windows | L’app « Caméra » du Store ne liste pas les caméras DirectShow. Utilisez-la dans un navigateur, Zoom, Teams, OBS… |
 | Pas de micro « EvCam Micro » | Onglet *Micro* → **Installer le micro virtuel** (ou **Créer le micro « EvCam Micro »** si VB-CABLE est déjà installé), acceptez la demande administrateur, puis relancez l’application. Si Windows indique qu’un redémarrage est nécessaire, redémarrez le PC. |
 | Pas de son | Choisissez « EvCam Micro » (ou « CABLE Output » si non créé) comme micro et vérifiez le vumètre de l’onglet *Micro*. |
-| Dézoom insuffisant | Essayez les autres objectifs de la liste, **Dézoom maximal**, ou augmentez le *Dézoom numérique* (jusqu’à 90 %). Un téléphone qui n’expose qu’un objectif ne peut pas voir plus large. |
+| Dézoom insuffisant | Essayez les autres objectifs de la liste, **Dézoom maximal**, ou baissez le *Zoom numérique* (jusqu’à 0,25×). Un téléphone qui n’expose qu’un objectif ne peut pas voir plus large. |
+| Image saccadée (20 i/s au lieu de 60) | Regardez la carte *Fluidité* : elle dit qui limite (caméra, encodeur, Wi-Fi, PC, chaleur, ou EvCam lui-même) et propose le **lissage** ou **Forcer**. Plus de lumière aide souvent : une caméra dans une pièce sombre pose plus longtemps et ralentit. |
 | Le flash ne s’allume pas | Passez sur la caméra arrière. Certains navigateurs refusent la lampe pendant la capture vidéo : l’appli Android tente l’API native. Sur la caméra avant, la lumière d’appoint est l’écran. |
 | L’image disparaît écran éteint | Normal : Android coupe parfois la caméra écran éteint. Le micro continue ; la caméra revient quand l’écran se rallume. Acceptez l’exemption batterie proposée par l’appli. |
 | Image de travers | Utilisez *Orientation*, ou tenez le téléphone en mode paysage. |

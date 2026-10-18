@@ -70,6 +70,7 @@ class UI {
     this._bindTabs();
     this._bindSettings();
     this._bindButtons();
+    this._bindPreviewZoom();
     this._bindWelcome();
     this.extras = new Extras(this);
     this.extras.init();
@@ -144,10 +145,64 @@ class UI {
     $$('input[type="range"][data-setting]').forEach((input) => {
       input.addEventListener('input', () => {
         const scale = Number(input.dataset.scale || 1);
-        store.set(input.dataset.setting, Number(input.value) / scale);
+        store.set(input.dataset.setting, input.dataset.logMin ? this._fromLog(input) : Number(input.value) / scale);
         this._paintRange(input);
       });
     });
+  }
+
+  /** Slider position (0..1000) -> value, for sliders that cover a wide range on a logarithmic scale (zoom 25..400 %). */
+  _fromLog(input) {
+    const lo = Number(input.dataset.logMin);
+    const hi = Number(input.dataset.logMax);
+    let v = lo * Math.pow(hi / lo, Number(input.value) / 1000);
+    const snap = Number(input.dataset.snap || 0);
+    if (snap && Math.abs(v - snap) / snap < 0.035) v = snap; // 1× is easy to hit
+    return Math.round(v);
+  }
+
+  _toLog(input, value) {
+    const lo = Number(input.dataset.logMin);
+    const hi = Number(input.dataset.logMax);
+    return Math.round((1000 * Math.log(Math.max(lo, Math.min(hi, value)) / lo)) / Math.log(hi / lo));
+  }
+
+  /**
+   * Framing straight on the preview: wheel = zoom, drag = move the picture, double-click = back to centre.
+   * (The same values as the zoom slider and the "Recentrer" button of the lens card.)
+   */
+  _bindPreviewZoom() {
+    const { store, compositor } = this;
+    const canvas = $('#preview');
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    canvas.addEventListener('wheel', (e) => {
+      if (!compositor.hasSource || this.mode === 'empty') return;
+      e.preventDefault();
+      const z = store.get('camera.zoom');
+      store.set('camera.zoom', Math.round(clamp(z * Math.pow(1.0015, -e.deltaY), 25, 400)));
+    }, { passive: false });
+
+    let drag = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || !compositor.hasSource || this.mode === 'empty') return;
+      const rect = canvas.getBoundingClientRect();
+      const g = compositor.framing();
+      drag = { x: e.clientX, y: e.clientY, panX: store.get('camera.panX'), panY: store.get('camera.panY'), k: rect.width / compositor.w, g };
+      canvas.setPointerCapture(e.pointerId);
+      canvas.classList.add('panning');
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      // pixels of the output frame moved by the pointer -> fraction of the room the picture has
+      const dx = (e.clientX - drag.x) / drag.k;
+      const dy = (e.clientY - drag.y) / drag.k;
+      if (drag.g.roomX > 0.5) store.set('camera.panX', Math.round(clamp(drag.panX + (dx / drag.g.roomX) * 100, -100, 100)));
+      if (drag.g.roomY > 0.5) store.set('camera.panY', Math.round(clamp(drag.panY + (dy / drag.g.roomY) * 100, -100, 100)));
+    });
+    const end = () => { drag = null; canvas.classList.remove('panning'); };
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
+    canvas.addEventListener('dblclick', () => { store.set('camera.panX', 0); store.set('camera.panY', 0); });
   }
 
   _paintRange(input) {
@@ -331,7 +386,8 @@ class UI {
     });
     $$('input[type="range"][data-setting]').forEach((input) => {
       const scale = Number(input.dataset.scale || 1);
-      input.value = Math.round(store.get(input.dataset.setting) * scale);
+      const value = store.get(input.dataset.setting);
+      input.value = input.dataset.logMin ? this._toLog(input, value) : Math.round(value * scale);
       this._paintRange(input);
     });
     $('#gainVal').textContent = `${Math.round(store.get('audio.gain') * 100)} %`;

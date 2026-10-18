@@ -27,6 +27,7 @@ const PATHS = {
   lens: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2"/>',
   battery: '<rect x="3" y="8" width="16" height="9" rx="2.5"/><path d="M21 11v3M7 12.5h5"/>',
   videooff: '<path d="M3 3l18 18"/><path d="M10 6h2a3 3 0 0 1 3 3v1.5l5-2.9a.7.7 0 0 1 1.1.6v7.6M15 15v.5a2.5 2.5 0 0 1-2.5 2.5H6a3 3 0 0 1-3-3V9a3 3 0 0 1 1.2-2.4"/>',
+  gauge: '<path d="M4 17.5a8.5 8.5 0 1 1 16 0"/><path d="m12 13.5 3.8-4.6"/><circle cx="12" cy="13.5" r="1.3" class="fill"/>',
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>'
 };
 

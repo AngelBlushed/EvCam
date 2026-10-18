@@ -64,6 +64,12 @@
     camWanted: true,             // the camera is wanted (not switched off by the user): brought back after a sleep
     thermal: { level: 0, tempC: null, status: 0 }, // 0 normal, 1 warm (720p30), 2 hot (480p24): set by checkThermal()
     thermalTimer: 0,
+    force: false,                // "force 60 fps": ask the camera for the rate as a requirement, give frame rate priority over sharpness
+    fluid: {                     // what the camera / encoder really deliver compared with what was asked (see checkFluid)
+      target: 0, capture: null, encoded: null, limit: 'none', reason: '', w: 0, h: 0,
+      hist: [], tick: 0, settleUntil: 0, fixing: false, tried: {}, fixed: '', unfixable: false, resCap: 0
+    },
+    fluidTimer: 0,
     encoder: '',                 // outbound-rtp encoderImplementation, e.g. "libvpx" or a MediaCodec name
     encoderHw: null,             // true hardware, false software, null unknown
     encoderTimer: 0,
@@ -139,6 +145,7 @@
   }
 
   function fail(message, fatal = false) {
+    dbg('fail', message, new Error().stack);
     teardown();
     state.userStopped = true;
     if (fatal) native((n) => n.home('token'));
@@ -165,24 +172,37 @@
   const audioTrack = () => (state.stream ? state.stream.getAudioTracks()[0] : null);
 
   /** Settings really used: the PC's choice, lowered while the phone is hot (see checkThermal). */
-  function effCfg() {
-    const c = { ...state.cfg };
-    const cap = [null, { px: 1280 * 720, fps: 30, floor: 1500000 }, { px: 848 * 480, fps: 24, floor: 800000 }][state.thermal.level];
-    if (!cap) return c;
+  function capPixels(c, maxPx) {
     const px = c.width * c.height;
-    if (px > cap.px) {
-      const k = Math.sqrt(cap.px / px);
+    if (maxPx && px > maxPx) {
+      const k = Math.sqrt(maxPx / px);
       c.width = Math.max(4, Math.round((c.width * k) / 4) * 4);
       c.height = Math.max(4, Math.round((c.height * k) / 4) * 4);
     }
+  }
+
+  function effCfg() {
+    const c = { ...state.cfg };
+    // the camera cannot hold the requested rate at this size (found by fixFps): stay at the size where it can
+    capPixels(c, state.fluid.resCap);
+    const cap = [null, { px: 1280 * 720, fps: 30, floor: 1500000 }, { px: 848 * 480, fps: 24, floor: 800000 }][state.thermal.level];
+    if (!cap) return c;
+    capPixels(c, cap.px);
     c.fps = Math.min(c.fps, cap.fps);
     c.bitrate = Math.max(cap.floor, Math.round(Math.min(c.bitrate, c.width * c.height * c.fps * 0.09)));
     return c;
   }
 
-  function videoConstraints(facing, deviceId) {
+  /** A high frame rate (or "force") is demanded from the camera, not just hoped for: the browser then picks a format that can do it. */
+  const wantsRate = () => state.force || effCfg().fps >= 50;
+
+  function rateConstraint(fps, strict = true) {
+    return strict && wantsRate() ? { min: Math.max(15, Math.round(fps * 0.9)), ideal: fps } : { ideal: fps };
+  }
+
+  function videoConstraints(facing, deviceId, strict = true) {
     const { width, height, fps } = effCfg();
-    const base = { width: { ideal: width }, height: { ideal: height }, aspectRatio: { ideal: width / height }, frameRate: { ideal: fps } };
+    const base = { width: { ideal: width }, height: { ideal: height }, aspectRatio: { ideal: width / height }, frameRate: rateConstraint(fps, strict) };
     return deviceId ? { ...base, deviceId: { exact: deviceId } } : { ...base, facingMode: { ideal: facing } };
   }
 
@@ -201,15 +221,23 @@
     }
     const wantVideo = !audioOnly;
     const wantAudio = audioOnly || (state.wantMic && !videoOnly);
+    // the frame rate may be a requirement ({min}): a camera that cannot do it is not refused, it just gets the soft version
+    const grab = async (video, audio) => {
+      try {
+        return await navigator.mediaDevices.getUserMedia({ video: video ? videoConstraints(facing, deviceId, true) : false, audio });
+      } catch (err) {
+        if (video && err && err.name === 'OverconstrainedError') {
+          return navigator.mediaDevices.getUserMedia({ video: videoConstraints(facing, deviceId, false), audio });
+        }
+        throw err;
+      }
+    };
     try {
-      return await navigator.mediaDevices.getUserMedia({
-        video: wantVideo ? videoConstraints(facing, deviceId) : false,
-        audio: wantAudio ? audioConstraints() : false
-      });
+      return await grab(wantVideo, wantAudio ? audioConstraints() : false);
     } catch (err) {
       if (wantVideo && wantAudio && err.name !== 'NotReadableError') {
         // Maybe only the microphone is the problem: continue with video alone.
-        const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints(facing, deviceId), audio: false });
+        const stream = await grab(true, false);
         toast('Micro indisponible : image seule.');
         return stream;
       }
@@ -348,6 +376,7 @@
     attachPreview();
     await detectCaps();
     tuneSender();
+    resetFluid(true);
   }
 
   const switchCamera = (facing) => openVideo({ facing });
@@ -581,7 +610,10 @@
       const c = effCfg();
       p.encodings[0].maxBitrate = c.bitrate;
       p.encodings[0].maxFramerate = c.fps;
-      p.degradationPreference = 'maintain-resolution';
+      // When the phone cannot keep up, WebRTC gives something up: with "maintain-resolution" that is the frame rate (a
+      // 60 fps request quietly became 20), which is the worst thing for movement. For a high rate it now sacrifices
+      // sharpness instead; at 24 / 30 fps it balances both.
+      p.degradationPreference = wantsRate() ? 'maintain-framerate' : 'balanced';
       await sender.setParameters(p);
     } catch { /* optional tuning */ }
   }
@@ -599,6 +631,7 @@
   function onConnectionState(pc) {
     if (pc !== state.pc) return;
     const s = pc.connectionState;
+    dbg('connection', s);
     if (s === 'connected') {
       state.attempts = 0;
       state.lostAt = 0;
@@ -689,6 +722,7 @@
       standbyReason: state.standbyReason,
       thermal: state.thermal.level,
       tempC: state.thermal.tempC,
+      fluid: fluidReport(),
       encoder: state.encoder,
       encoderHw: state.encoderHw,
       codec: state.cfg.codec,
@@ -707,9 +741,17 @@
     }
     if (msg.t !== 'config') return;
 
+    const asked = `${msg.width}|${msg.height}|${msg.fps}`;
     for (const key of ['width', 'height', 'fps', 'bitrate', 'noiseSuppression']) {
       if (msg[key] !== undefined) state.cfg[key] = msg[key];
     }
+    if (msg.force !== undefined && !!msg.force !== state.force) {
+      state.force = !!msg.force;
+      resetFluid(true); // a different way of asking the camera: look again
+    } else if ((msg.width || msg.height || msg.fps) && asked !== state.fluidAsked) {
+      resetFluid(true);
+    }
+    if (msg.width || msg.height || msg.fps) state.fluidAsked = asked;
     if (msg.eco !== undefined) { state.eco = !!msg.eco; scheduleEcoBlackout(); }
 
     // wake up first: everything below needs the camera
@@ -730,7 +772,7 @@
           width: { ideal: c.width },
           height: { ideal: c.height },
           aspectRatio: { ideal: c.width / c.height },
-          frameRate: { ideal: c.fps }
+          frameRate: rateConstraint(c.fps)
         }).catch(() => {});
       }
       if (msg.zoom !== undefined) await setZoom(msg.zoom);
@@ -876,6 +918,142 @@
   }
 
   // ---------------------------------------------------------------------------
+  // fluidity: does the picture really flow at the rate that was asked? The camera, the encoder or the Wi-Fi may be
+  // delivering far less (a camera that drops to 20 fps in a dim room, a software encoder that cannot keep up...).
+  // EvCam measures each stage, says which one limits, and tries to win the rate back before giving up.
+  // ---------------------------------------------------------------------------
+
+  function resetFluid(clearCap = false) {
+    const f = state.fluid;
+    f.hist = [];
+    f.settleUntil = performance.now() + 5000;
+    f.limit = 'none';
+    if (clearCap) { f.resCap = 0; f.fixed = ''; f.unfixable = false; f.tried = {}; }
+  }
+
+  function fluidReport() {
+    const f = state.fluid;
+    const r = (v) => (typeof v === 'number' ? Math.round(v * 10) / 10 : null);
+    return { target: f.target, capture: r(f.capture), encoded: r(f.encoded), limit: f.limit, reason: f.reason, w: f.w, h: f.h, fixing: f.fixing, fixed: f.fixed, unfixable: f.unfixable, resCap: !!f.resCap, force: state.force };
+  }
+
+  /** What the camera delivers (media-source), what the encoder sends (outbound-rtp), and why it may be holding back. */
+  async function readFluid() {
+    const pc = state.pc;
+    if (!pc || pc.connectionState !== 'connected') return null;
+    const report = await pc.getStats();
+    let out = null;
+    let src = null;
+    report.forEach((r) => {
+      if (r.type === 'outbound-rtp' && (r.kind === 'video' || r.mediaType === 'video') && r.framesEncoded > 0) out = r;
+      else if (r.type === 'media-source' && (r.kind === 'video' || r.mediaType === 'video')) src = r;
+    });
+    if (!out && !src) return null;
+    return {
+      capture: src && typeof src.framesPerSecond === 'number' ? src.framesPerSecond : null,
+      encoded: out && typeof out.framesPerSecond === 'number' ? out.framesPerSecond : null,
+      reason: out ? out.qualityLimitationReason || 'none' : 'none',
+      w: out ? out.frameWidth || 0 : 0,
+      h: out ? out.frameHeight || 0 : 0
+    };
+  }
+
+  const avgOf = (hist, key) => {
+    const v = hist.map((h) => h[key]).filter((x) => typeof x === 'number');
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  };
+
+  async function checkFluid() {
+    if (!state.running || state.standby) return;
+    let sample;
+    try { sample = await readFluid(); } catch { return; }
+    if (!sample) return;
+    const f = state.fluid;
+    const target = effCfg().fps;
+    f.target = target;
+    f.w = sample.w;
+    f.h = sample.h;
+    f.hist.push(sample);
+    if (f.hist.length > 3) f.hist.shift();
+    f.capture = avgOf(f.hist, 'capture');
+    f.encoded = avgOf(f.hist, 'encoded');
+    f.reason = sample.reason;
+    const settled = performance.now() >= f.settleUntil && f.hist.length >= 2 && !f.fixing;
+    let limit = 'none';
+    if (settled) {
+      const low = (v) => v != null && v < target * 0.85;
+      if (low(f.capture)) limit = state.thermal.level > 0 ? 'thermal' : 'camera';
+      else if (low(f.encoded)) limit = sample.reason === 'bandwidth' ? 'network' : 'encoder';
+    } else if (f.fixing) {
+      limit = f.limit; // keep the verdict while the fix is being tried
+    }
+    const changed = limit !== f.limit;
+    f.limit = limit;
+    dbg('fluid', JSON.stringify(fluidReport()));
+    if (changed || ++f.tick % 3 === 0) sendState();
+    if (settled && (limit === 'camera' || limit === 'encoder' || limit === 'network')) fixFps();
+  }
+
+  /**
+   * The rate is not reached: (1) demand it from the camera (the browser may then pick a format that can do it),
+   * then (2) try smaller sizes, which many phones can film at 60 fps although they cannot at 1080p. Each step is
+   * measured; if none works the original request is restored and the verdict stays "the camera limits".
+   */
+  async function fixFps() {
+    const f = state.fluid;
+    const vt = videoTrack();
+    if (!vt || f.fixing || state.standby || DEMO) return;
+    const base = effCfg();
+    const key = `${state.lensId || state.facing}|${base.fps}|${base.width}x${base.height}`;
+    if (f.tried[key]) return; // once per camera and request: no flapping for a camera that simply cannot
+    f.tried[key] = true;
+    f.fixing = true;
+    sendState();
+    const target = base.fps;
+    const need = target * 0.85;
+    const apply = (w, h, strict) => vt.applyConstraints({
+      width: { ideal: w }, height: { ideal: h }, aspectRatio: { ideal: w / h }, frameRate: strict ? { min: Math.max(15, Math.round(target * 0.9)), ideal: target } : { ideal: target }
+    });
+    const measure = async () => {
+      await sleep(3000);
+      for (let i = 0; i < 2; i++) {
+        const sample = await readFluid().catch(() => null);
+        if (sample) {
+          const worst = Math.min(sample.capture == null ? 1e9 : sample.capture, sample.encoded == null ? 1e9 : sample.encoded);
+          if (worst >= need) return true;
+        }
+        await sleep(900);
+      }
+      return false;
+    };
+    let success = false;
+    try {
+      // 1. same size, rate demanded
+      try { await apply(base.width, base.height, true); success = await measure(); } catch { /* format refused */ }
+      if (success) f.fixed = 'format';
+      // 2. smaller sizes
+      if (!success) {
+        const ladder = [[1920, 1080], [1280, 720], [960, 540], [848, 480], [640, 360]].filter(([w, h]) => w * h < base.width * base.height * 0.9).slice(0, 2);
+        for (const [w, h] of ladder) {
+          if (state.standby || videoTrack() !== vt) break;
+          try { await apply(w, h, true); } catch { continue; }
+          if (await measure()) { f.resCap = w * h; f.fixed = 'size'; success = true; break; }
+        }
+      }
+      if (!success) {
+        // nothing helps: give the camera back its original request, and say so
+        try { await apply(base.width, base.height, false); } catch { /* keep what it has */ }
+        f.unfixable = true;
+      }
+    } finally {
+      f.fixing = false;
+      resetFluid(false);
+      applyThermal();
+      sendState();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // heat: the Android app reports the battery temperature and the system's thermal status; when the phone gets
   // warm EvCam lowers resolution, frame rate and bitrate by itself, and restores them once it has cooled down
   // ---------------------------------------------------------------------------
@@ -886,7 +1064,7 @@
     const vt = videoTrack();
     const c = effCfg();
     if (vt && !DEMO && !state.standby) {
-      await vt.applyConstraints({ width: { ideal: c.width }, height: { ideal: c.height }, aspectRatio: { ideal: c.width / c.height }, frameRate: { ideal: c.fps } }).catch(() => {});
+      await vt.applyConstraints({ width: { ideal: c.width }, height: { ideal: c.height }, aspectRatio: { ideal: c.width / c.height }, frameRate: rateConstraint(c.fps) }).catch(() => {});
     }
     tuneSender();
   }
@@ -968,6 +1146,10 @@
     clearTimeout(ecoTimer);
     clearInterval(state.thermalTimer);
     clearInterval(state.encoderTimer);
+    clearInterval(state.fluidTimer);
+    state.fluid.hist = [];
+    state.fluid.limit = 'none';
+    state.fluid.fixing = false;
     state.encoder = '';
     state.encoderHw = null;
     state.thermal = { level: 0, tempC: null, status: 0 };
@@ -1024,6 +1206,9 @@
     clearInterval(state.encoderTimer);
     state.encoderTimer = setInterval(checkEncoder, 20000);
     setTimeout(checkEncoder, 6000);
+    clearInterval(state.fluidTimer);
+    resetFluid(true);
+    state.fluidTimer = setInterval(checkFluid, 2000);
     scheduleEcoBlackout();
     setLiveMode('live');
     setScreen('live');

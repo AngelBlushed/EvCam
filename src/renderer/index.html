@@ -57,6 +57,7 @@
               <span class="chip" id="chipRes">—</span>
               <span class="spacer"></span>
               <span class="chip warn" id="chipStall"><i data-ic="alert"></i>Flux en pause : réveillez le téléphone</span>
+              <span class="chip warn" id="chipFluid" title="Voir la carte Fluidité"><i data-ic="gauge"></i><span id="chipFluidText">Caméra limitée</span></span>
               <span class="chip warn" id="chipHot"><i data-ic="alert"></i><span id="chipHotText">Téléphone chaud · qualité réduite</span></span>
               <span class="chip standby" id="chipStandby"><i data-ic="battery"></i><span id="chipStandbyText">Caméra désactivée · micro seul</span></span>
               <span class="chip use" id="chipUse"><i data-ic="video"></i>Utilisée par une application</span>
@@ -169,6 +170,42 @@
               </div>
             </div>
 
+            <div class="card" id="fluidCard">
+              <div class="card-head">
+                <div class="ico g2"><i data-ic="gauge"></i></div>
+                <div class="head-text"><h3>Fluidité</h3><p id="fluidSub">Connectez le téléphone pour la mesurer</p></div>
+                <span class="badge" id="fluidBadge" data-tone="muted">—</span>
+              </div>
+              <div class="field" id="fluidStats" hidden>
+                <div class="kv"><span>Caméra du téléphone</span><b id="fluidCapture">—</b></div>
+                <div class="kv"><span>Reçu par le PC</span><b id="fluidRecv">—</b></div>
+                <div class="kv"><span>Sortie d’EvCam</span><b id="fluidOut">—</b></div>
+              </div>
+              <div class="callout" id="fluidCallout" hidden>
+                <i data-ic="alert"></i>
+                <div><b id="fluidCalloutTitle">La caméra limite la fluidité</b><p id="fluidCalloutText"></p></div>
+                <div class="btn-row">
+                  <button class="btn primary" id="btnSmoothOn" type="button">Activer le lissage</button>
+                  <button class="btn" id="btnForceOn" type="button" hidden>Forcer</button>
+                  <button class="btn" id="btnSmoothOff" type="button">Non merci</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>Lissage des images <em id="fluidTarget">post-traitement</em></label>
+                <div class="seg" data-setting="camera.smooth">
+                  <button type="button" data-value="ask">Proposer</button>
+                  <button type="button" data-value="auto">Automatique</button>
+                  <button type="button" data-value="off">Désactivé</button>
+                </div>
+                <small>Quand le téléphone envoie moins d’images par seconde que demandé, EvCam calcule celles qui manquent (interpolation du mouvement) pour une sortie régulière. Ajoute environ une image de retard : au besoin, décalez le son dans l’onglet Micro. Ne retire pas le flou de bougé d’une caméra qui pose longtemps.</small>
+                <small id="fluidSmoothInfo" hidden></small>
+              </div>
+              <div class="field row">
+                <div><label>Forcer les images par seconde</label><small>Exige la cadence de la caméra du téléphone et la préfère à la netteté : la résolution baisse avant la fluidité. La protection anti-chauffe du téléphone reste active et baisse la qualité d’elle-même s’il chauffe.</small></div>
+                <label class="switch"><input type="checkbox" data-setting="camera.force"><span></span></label>
+              </div>
+            </div>
+
             <div class="card" id="lensCard">
               <div class="card-head">
                 <div class="ico g3"><i data-ic="lens"></i></div>
@@ -180,9 +217,15 @@
                 <small id="zoomHint"></small>
               </div>
               <div class="field slider">
-                <label>Dézoom numérique <em id="dezoomVal">0 %</em></label>
-                <input type="range" min="0" max="90" step="1" data-setting="camera.dezoom">
-                <small>Réduit l’image dans le cadre et remplit le tour. Ne montre pas plus de décor que l’objectif ne voit.</small>
+                <label>Zoom numérique <em id="dezoomVal">1×</em></label>
+                <input type="range" min="0" max="1000" step="1" data-setting="camera.zoom" data-log-min="25" data-log-max="400" data-snap="100" id="zoomRange">
+                <small id="zoomDigHint">Réduit l’image dans le cadre (à gauche de 1×) ou la rapproche en rognant les bords (à droite). Molette sur l’aperçu : zoom · glisser : déplacer · double-clic : recentrer.</small>
+              </div>
+              <div class="field row stack">
+                <div class="btn-row">
+                  <button class="btn" id="btnZoomCenter" type="button">Recentrer l’image</button>
+                  <button class="btn" id="btnZoom1" type="button">Zoom 1×</button>
+                </div>
               </div>
               <div class="field">
                 <label>Fond autour de l’image</label>

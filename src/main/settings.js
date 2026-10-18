@@ -20,9 +20,15 @@ const DEFAULTS = {
   settingsVersion: 2,     // 2: H.264 given back once (a wrong "H.264 does not work" verdict used to be saved for good)
   camera: {
     enabled: true,        // false = microphone only: the phone camera is switched off
-    dezoom: 0,            // 0..90 %: shrink the picture inside the frame (digital zoom-out)
+    dezoom: 0,            // (before 1.5) 0..90 %: shrink the picture; now folded into `zoom` on load
+    zoom: 100,            // 25..400 %: digital zoom of the picture inside the frame (below 100 shrinks it, above crops it)
+    panX: 0,              // -100..100: where the zoomed picture sits (fraction of the room it has to move, left/right)
+    panY: 0,              // -100..100: same, up/down
     dezoomBg: 'blur',     // what fills the frame around it: 'blur' | 'mirror' | 'black'
     wide: false,          // capture the full 4:3 sensor (more scene than the 16:9 crop)
+    smooth: 'ask',        // frame smoothing (post-processing) when the phone delivers fewer frames than asked:
+                          // 'ask' = only propose it, 'auto' = apply it when needed, 'off' = never, stop proposing
+    force: false,         // "force the frame rate": demand it from the phone's camera and give it priority over sharpness
     quality: '720p',      // '480p' | '720p' | '1080p'
     fps: 30,              // 24 | 30 | 60
     fit: 'contain',       // 'cover' | 'contain'
@@ -77,7 +83,14 @@ function sanitize(s) {
   if (!['h264', 'vp8'].includes(s.power.codec)) s.power.codec = 'h264';
   if (!['ask', 'tray', 'quit'].includes(s.closeAction)) s.closeAction = 'ask';
   s.camera.dezoom = Math.round(clamp(s.camera.dezoom, 0, 90, 0));
+  // 1.5: the old "digital zoom-out" slider became the zoom slider (100 % = no zoom)
+  if (s.camera.dezoom > 0 && s.camera.zoom === 100) s.camera.zoom = 100 - s.camera.dezoom;
+  s.camera.dezoom = 0;
+  s.camera.zoom = Math.round(clamp(s.camera.zoom, 25, 400, 100));
+  s.camera.panX = Math.round(clamp(s.camera.panX, -100, 100, 0));
+  s.camera.panY = Math.round(clamp(s.camera.panY, -100, 100, 0));
   if (!['blur', 'mirror', 'black'].includes(s.camera.dezoomBg)) s.camera.dezoomBg = 'blur';
+  if (!['ask', 'auto', 'off'].includes(s.camera.smooth)) s.camera.smooth = 'ask';
   if (!s.token || typeof s.token !== 'string') s.token = newToken();
   return s;
 }

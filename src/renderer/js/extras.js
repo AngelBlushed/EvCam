@@ -1,6 +1,7 @@
 'use strict';
 
 const { ipcRenderer } = require('electron');
+const { effectiveCamera } = require('./vcam');
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -27,6 +28,12 @@ class Extras {
     $('#ctlUltra').addEventListener('click', () => this.toggleMaxWide());
     $('#btnMaxWide').addEventListener('click', () => this.maxWide());
     $('#btnResetWide').addEventListener('click', () => this.resetWide());
+    $('#btnSmoothOn').addEventListener('click', () => this.ui.store.set('camera.smooth', 'auto'));
+    $('#btnSmoothOff').addEventListener('click', () => this.ui.store.set('camera.smooth', 'off'));
+    $('#btnForceOn').addEventListener('click', () => this.ui.store.set('camera.force', true));
+    $('#chipFluid').addEventListener('click', () => { this.ui.showTab('camera'); $('#fluidCard').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+    $('#btnZoomCenter').addEventListener('click', () => { this.ui.store.set('camera.panX', 0); this.ui.store.set('camera.panY', 0); });
+    $('#btnZoom1').addEventListener('click', () => { this.ui.store.set('camera.zoom', 100); this.ui.store.set('camera.panX', 0); this.ui.store.set('camera.panY', 0); });
     document.querySelectorAll('.js-force').forEach((b) => b.addEventListener('click', () => this.forceDetect()));
     $('#btnDiscord').addEventListener('click', () => this.restartDiscord());
     $('#btnMicCreate').addEventListener('click', () => (this.mic && this.mic.ok && !this.mic.virtual.capture ? this.installMic() : this.createMic()));
@@ -59,7 +66,9 @@ class Extras {
     const { engine, store } = this.ui;
     const z = engine.phone.zoom;
     store.set('camera.wide', true);
-    store.set('camera.dezoom', 35);
+    store.set('camera.zoom', 65);
+    store.set('camera.panX', 0);
+    store.set('camera.panY', 0);
     if (engine.live && z && z.supported) engine.send({ t: 'config', zoom: z.min });
     this.ui.toast(z && z.supported && z.min < 0.95
       ? 'Dézoom maximal : ultra grand-angle, capteur 4:3 entier et réduction de l’image.'
@@ -70,17 +79,19 @@ class Extras {
     const { engine, store } = this.ui;
     const z = engine.phone.zoom;
     store.set('camera.wide', false);
-    store.set('camera.dezoom', 0);
+    store.set('camera.zoom', 100);
+    store.set('camera.panX', 0);
+    store.set('camera.panY', 0);
     if (engine.live && z && z.supported) engine.send({ t: 'config', zoom: 1 });
   }
 
   toggleMaxWide() {
     const { store } = this.ui;
-    if (!this.ui.engine.live && !store.get('camera.wide') && !store.get('camera.dezoom')) {
+    if (!this.ui.engine.live && !store.get('camera.wide') && store.get('camera.zoom') >= 100) {
       this.ui.toast('Connectez d’abord le téléphone.', 'warn', 'alert');
       return;
     }
-    if (store.get('camera.wide') || store.get('camera.dezoom') > 0) this.resetWide();
+    if (store.get('camera.wide') || store.get('camera.zoom') < 100) this.resetWide();
     else this.maxWide();
   }
 
@@ -360,13 +371,119 @@ class Extras {
     await this.refreshMic();
   }
 
+  // ------------------------------------------------------------------ fluidity
+  /**
+   * Compares what was asked (frames per second) with what really arrives, says which stage limits (the phone's camera,
+   * its encoder, the Wi-Fi, this PC) and proposes the frame smoothing when the camera cannot deliver.
+   */
+  renderFluid() {
+    const { engine, store, compositor } = this.ui;
+    const live = engine.live && !engine.phone.standby;
+    const eff = effectiveCamera(store.settings, engine.phone.encoderHw === false);
+    const fl = engine.phone.fluid;
+    const asked = eff.asked;                               // the rate the user chose
+    const target = fl && fl.target ? fl.target : eff.fps;  // the rate asked from the phone (the phone also knows about heat)
+    const rate = compositor.srcRate;                       // what really arrives
+    const mode = store.get('camera.smooth');
+    const now = performance.now();
+    const heat = live && (engine.phone.thermal || 0) > 0;
+
+    const low = live && rate > 0 && rate < target * 0.85;
+    if (!low) this.fluidLowSince = 0;
+    else if (!this.fluidLowSince) this.fluidLowSince = now;
+    const limited = low && now - this.fluidLowSince > 5000; // not a hiccup
+
+    // who limits? the phone measured its own camera and encoder; otherwise it is the Wi-Fi or this PC
+    let limit = limited ? (fl && fl.limit && fl.limit !== 'none' ? fl.limit : '') : '';
+    if (limited && !limit) limit = compositor.stats.outFps && compositor.stats.outFps < target * 0.85 ? 'pc' : 'network';
+    // EvCam itself asks the phone for less than the chosen rate (software encoder, VP8, battery saver, heat)
+    const capped = live && !limited && (eff.fps < asked || heat);
+    const capWhy = heat ? 'thermal' : eff.capReason;
+    const r = (v) => (v == null ? '—' : `${Math.round(v)} i/s`);
+
+    $('#fluidStats').hidden = !live;
+    if (live) {
+      const cap = $('#fluidCapture');
+      cap.textContent = fl && fl.capture != null ? r(fl.capture) : '—';
+      cap.className = fl && fl.capture != null && fl.capture < target * 0.85 ? 'low' : '';
+      const rec = $('#fluidRecv');
+      rec.textContent = rate ? r(rate) : '—';
+      rec.className = limited ? 'low' : rate ? 'ok' : '';
+      $('#fluidOut').textContent = compositor.smoothActive ? `${r(compositor.stats.outFps || compositor.fps)} · lissé` : r(compositor.stats.outFps);
+    }
+
+    const name = { camera: 'la caméra', encoder: 'l’encodeur', network: 'le Wi-Fi', pc: 'ce PC', thermal: 'la chaleur' }[limit] || '';
+    const badge = $('#fluidBadge');
+    if (!live) { badge.textContent = '—'; badge.dataset.tone = 'muted'; }
+    else if (!rate) { badge.textContent = 'Mesure…'; badge.dataset.tone = 'muted'; }
+    else if (limited || capped) { badge.textContent = `${Math.round(rate)} sur ${asked} i/s`; badge.dataset.tone = 'warn'; }
+    else { badge.textContent = `${Math.round(rate)} i/s`; badge.dataset.tone = 'ok'; }
+
+    const cause = {
+      camera: fl && fl.unfixable
+        ? `La caméra du téléphone ne fournit que ${r(fl && fl.capture)}, même en lui imposant la cadence et en baissant la résolution (souvent : pièce sombre, la caméra pose plus longtemps).`
+        : `La caméra du téléphone ne fournit que ${r(fl && fl.capture)} (souvent : pièce sombre, ou capteur limité à cette résolution).`,
+      encoder: 'Le processeur du téléphone n’arrive pas à encoder assez vite : baissez la qualité ou utilisez H.264 matériel.',
+      network: 'Le Wi-Fi ne suit pas (débit ou pertes) : rapprochez le téléphone de la box.',
+      pc: 'Ce PC n’arrive pas à produire autant d’images : baissez la qualité.',
+      thermal: 'Le téléphone chauffe : EvCam a baissé la fluidité pour le protéger.'
+    }[limit] || '';
+    const capText = {
+      soft: `L’encodeur vidéo de ce téléphone est logiciel : à ${asked} i/s il chaufferait beaucoup.`,
+      vp8: 'L’encodage VP8 est logiciel : à haute cadence il ferait beaucoup chauffer le téléphone.',
+      eco: `Le mode économie limite à ${eff.fps} i/s.`,
+      thermal: 'Le téléphone chauffe : EvCam a baissé la fluidité pour le protéger.'
+    }[capWhy] || '';
+
+    let sub = 'Le flux suit la cadence demandée';
+    if (!live) sub = 'Connectez le téléphone pour la mesurer';
+    else if (!rate) sub = 'Mesure en cours…';
+    else if (compositor.smoothActive) sub = `Lissage actif : ${Math.round(rate)} → ${compositor.fps} i/s`;
+    else if (limited) sub = `Limité par ${name}`;
+    else if (capped) sub = `Plafonné à ${eff.fps} i/s par EvCam`;
+    else if (fl && fl.fixed === 'format') sub = `${target} i/s obtenus en exigeant la cadence de la caméra`;
+    else if (fl && fl.fixed === 'size') sub = `${target} i/s obtenus en baissant la résolution de la caméra`;
+    if (fl && fl.fixing) sub = 'Recherche d’un réglage qui tient la cadence…';
+    $('#fluidSub').textContent = sub;
+
+    // proposal: smoothing (computed here, the phone stays cool) and, when EvCam is the one capping, forcing the rate
+    const callout = $('#fluidCallout');
+    const canForce = capped && !heat && (capWhy === 'soft' || capWhy === 'vp8') && !store.get('camera.force');
+    const propose = (limited && limit !== 'thermal' && mode === 'ask') || (capped && mode === 'ask' && !compositor.smoothActive);
+    callout.hidden = !propose;
+    $('#btnForceOn').hidden = !canForce;
+    if (propose) {
+      const goal = limited ? target : asked;
+      $('#fluidCalloutTitle').textContent = limited ? `Limité à ${Math.round(rate)} i/s au lieu de ${target}` : `Limité à ${eff.fps} i/s au lieu de ${asked}`;
+      $('#fluidCalloutText').textContent = `${limited ? cause : capText} Le lissage calcule les images manquantes sur ce PC (sortie ${Math.max(goal, asked)} i/s).${canForce ? ` « Forcer » exige ${asked} i/s du téléphone : il chauffera plus, sa protection anti-chauffe reste active.` : ''}`;
+    }
+
+    const info = $('#fluidSmoothInfo');
+    info.hidden = true;
+    if (compositor.smoothError) { info.hidden = false; info.textContent = `Lissage indisponible sur ce PC : ${compositor.smoothError}`; }
+    else if (mode === 'auto' && live) {
+      info.hidden = false;
+      info.textContent = compositor.smoothActive ? `Lissage actif : ${Math.round(rate)} → ${compositor.fps} i/s.` : 'Lissage prêt : il se mettra en route si le téléphone envoie moins d’images que la sortie demandée.';
+    } else if ((limited || capped) && mode === 'off') {
+      info.hidden = false;
+      info.textContent = limited ? `Le téléphone envoie ${Math.round(rate)} i/s au lieu de ${target} (${name}).` : capText;
+    }
+
+    // chip on the preview: visible while a proposal is pending
+    $('#chipFluid').classList.toggle('on', propose);
+    $('#chipFluidText').textContent = limited ? `Caméra limitée à ${Math.round(rate)} i/s · lisser ?` : `Plafonné à ${eff.fps} i/s · lisser à ${asked} ?`;
+    $('#fluidTarget').textContent = `${asked} i/s demandés`;
+  }
+
   // ------------------------------------------------------------------ main entry
   render() {
+    this.renderFluid();
     this.renderLens();
     this.renderPower();
     this.batteryAlerts();
     const { engine, store } = this.ui;
-    $('#dezoomVal').textContent = `${store.get('camera.dezoom')} %`;
+    const zoom = store.get('camera.zoom');
+    $('#dezoomVal').textContent = `${(zoom / 100).toFixed(zoom % 100 === 0 ? 0 : zoom < 100 ? 2 : 1).replace('.', ',')}×`;
     const standby = engine.live && !!engine.phone.standby;
     $('#chipStandby').classList.toggle('on', standby);
     const heat = engine.live ? engine.phone.thermal || 0 : 0;

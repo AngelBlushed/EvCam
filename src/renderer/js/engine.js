@@ -57,7 +57,7 @@ class Engine extends EventTarget {
     this.device = '';
     this.phone = {
       facing: 'user', hasMic: true, micMuted: false, torch: false, torchSupported: false, torchMode: 'torch',
-      zoom: { supported: false, min: 1, max: 1, value: 1 }, lensId: '', lenses: [], standby: false, standbyReason: '', thermal: 0, tempC: null, encoder: '', encoderHw: null, codec: '',
+      zoom: { supported: false, min: 1, max: 1, value: 1 }, lensId: '', lenses: [], standby: false, standbyReason: '', thermal: 0, tempC: null, encoder: '', encoderHw: null, codec: '', fluid: null,
       battery: null, charging: null
     };
     this.batteryLog = [];
@@ -93,6 +93,7 @@ class Engine extends EventTarget {
     this.phone.thermal = 0;
     this.phone.encoder = '';
     this.phone.encoderHw = null;
+    this.phone.fluid = null;
     this._setStatus('connecting');
 
     pc.ontrack = (event) => this._onTrack(session, event);
@@ -127,7 +128,7 @@ class Engine extends EventTarget {
       if (msg.t === 'hello' || msg.t === 'state') {
         if (msg.device) { session.device = msg.device; this.device = msg.device; }
         const prevHw = this.phone.encoderHw;
-        for (const key of ['facing', 'hasMic', 'micMuted', 'torch', 'torchSupported', 'torchMode', 'zoom', 'lensId', 'lenses', 'standby', 'standbyReason', 'thermal', 'tempC', 'encoder', 'encoderHw', 'codec', 'battery', 'charging']) {
+        for (const key of ['facing', 'hasMic', 'micMuted', 'torch', 'torchSupported', 'torchMode', 'zoom', 'lensId', 'lenses', 'standby', 'standbyReason', 'thermal', 'tempC', 'encoder', 'encoderHw', 'codec', 'fluid', 'battery', 'charging']) {
           if (msg[key] !== undefined) this.phone[key] = msg[key];
         }
         if (this.phone.encoderHw !== prevHw) this.dispatchEvent(new CustomEvent('phone-encoder'));
@@ -194,6 +195,7 @@ class Engine extends EventTarget {
         facing: s.phone.facing,
         noiseSuppression: s.phone.noiseSuppression,
         eco: !!s.power.eco,
+        force: !!s.camera.force,
         codec: s.power.codec
       });
     };

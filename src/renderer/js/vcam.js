@@ -1,6 +1,7 @@
 'use strict';
 
 const koffi = require('koffi');
+const { FrameSmoother } = require('./smooth');
 
 /** Output sizes of the virtual camera (width and height must be multiples of four). */
 const QUALITIES = {
@@ -18,24 +19,28 @@ function targetBitrate(quality, fps, factor = 0.08) {
 /** Quality / frame rate / bitrate really used: the battery saver caps them (720p, 24 fps, lighter bitrate). */
 function effectiveCamera(settings, softEncoder = false) {
   let { quality, fps } = settings.camera;
+  const asked = fps;
+  let capReason = ''; // why EvCam itself asks the phone for less than the chosen frame rate: 'soft' | 'vp8' | 'eco'
   // bits per pixel and frame: a phone's hardware encoder + the Wi-Fi radio are what make it hot, so stay modest
   let factor = 0.08;
   // VP8 (or any software encoder) runs on the phone's CPU: 1080p / 60 would make it boiling hot, so stay at 720p / 30
   if (softEncoder || (settings.power && settings.power.codec === 'vp8')) {
     if (quality === '1080p') quality = '720p';
-    fps = Math.min(fps, 30);
+    // "force the frame rate" keeps what was asked: the phone then gives up sharpness before it gives up frames,
+    // and its own heat protection (which lowers everything when it gets hot) stays in charge
+    if (!settings.camera.force && fps > 30) { fps = 30; capReason = softEncoder ? 'soft' : 'vp8'; }
     factor = 0.1;
   }
   if (settings.power && settings.power.eco) {
     if (quality === '1080p') quality = '720p';
-    fps = Math.min(fps, 24);
+    if (fps > 24) { fps = 24; capReason = 'eco'; }
     factor = 0.05;
   }
   const size = QUALITIES[quality] || QUALITIES['720p'];
   // "wide" captures the whole 4:3 sensor (a 16:9 video crops the top and bottom of the scene)
   const wide = !!settings.camera.wide;
   const capture = wide ? { w: Math.round((size.h * 4) / 3 / 4) * 4, h: size.h } : size;
-  return { quality, fps, size, capture, wide, bitrate: Math.max(1000000, Math.round(capture.w * capture.h * fps * factor)) };
+  return { quality, fps, asked, capReason, size, capture, wide, bitrate: Math.max(1000000, Math.round(capture.w * capture.h * fps * factor)) };
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +145,17 @@ class Compositor extends EventTarget {
     this.srcFrames = 0;
     this.srcSeq = 0;        // increments for every frame received from the phone
     this.lastFrameAt = 0;   // performance.now() of the last frame received
+    this.prevFrameAt = 0;   // ... and of the one before it
+    this.srcInterval = 0;   // smoothed time between two frames from the phone (ms)
+
+    // frame smoothing (see smooth.js): allowed by the user, and only used while the phone sends clearly fewer frames
+    // per second than the virtual camera outputs
+    this.smoothAllowed = false;
+    this.smoother = null;
+    this.smoothActive = false;
+    this.smoothError = '';
+    this.smoothWorkerUrl = 'js/mvworker.js';
+    this._smPushAt = 0;
     this.outFrames = 0;
     this._lastKey = '';
     this._rgba = null;
@@ -233,6 +249,33 @@ class Compositor extends EventTarget {
     this._timer = setInterval(() => this._tick(), Math.round(1000 / this.fps));
   }
 
+  /** Frame smoothing on / off (the user's choice); it only runs while it is useful. */
+  setSmoothing(on) {
+    on = !!on;
+    if (on === this.smoothAllowed) return;
+    this.smoothAllowed = on;
+    this.smoothActive = false;
+    if (!on && this.smoother) { this.smoother.dispose(); this.smoother = null; }
+    this._lastKey = '';
+  }
+
+  /** Frames per second really arriving from the phone (smoothed). */
+  get srcRate() { return this.srcInterval > 0 ? 1000 / this.srcInterval : 0; }
+
+  _smoothWanted() {
+    const rate = this.srcRate;
+    return rate > 0 && rate < this.fps * (this.smoothActive ? 0.95 : 0.88);
+  }
+
+  _smootherInstance() {
+    if (!this.smoother && !this.smoothError) {
+      const sm = new FrameSmoother(this.smoothWorkerUrl);
+      if (sm.ok) this.smoother = sm;
+      else { this.smoothError = sm.error || 'indisponible'; this.smoothAllowed = false; this.dispatchEvent(new CustomEvent('smooth-error')); }
+    }
+    return this.smoother;
+  }
+
   setCameraOff(on, reason = '') {
     on = !!on;
     reason = on ? reason : '';
@@ -292,7 +335,23 @@ class Compositor extends EventTarget {
         if (gen !== this.gen) { if (value) value.close(); break; }
         this.srcFrames++;
         this.srcSeq++;
-        this.lastFrameAt = performance.now();
+        const now = performance.now();
+        if (this.lastFrameAt && now - this.lastFrameAt < 1000) {
+          const gap = now - this.lastFrameAt;
+          this.srcInterval = this.srcInterval ? this.srcInterval * 0.88 + gap * 0.12 : gap;
+        } else if (!this.lastFrameAt || now - this.lastFrameAt >= 1000) {
+          this.srcInterval = 0; // the stream (re)started: measure again
+        }
+        this.prevFrameAt = this.lastFrameAt;
+        this.lastFrameAt = now;
+        if (this.smoothAllowed && (this.consumer || this.previewVisible) && this._smoothWanted()) { // (nobody watching: nothing to compute)
+          const sm = this._smootherInstance();
+          if (sm) {
+            if (now - this._smPushAt > 400) sm.reset(); // frames were not being fed: start a fresh pair
+            sm.push(value);
+            this._smPushAt = now;
+          }
+        }
         if (this.frame) this.frame.close();
         this.frame = value; // keep only the latest frame
       }
@@ -314,12 +373,22 @@ class Compositor extends EventTarget {
 
     // Redraw (and read back) only when the picture can differ from the previous one:
     // a new frame from the phone, a changed setting, or an animated test card.
+    // smoothing: the picture shown is an in-between one, computed for a moment one frame in the past
+    let seq = this.video && !this.frame ? t0 : this.srcSeq;
+    let alpha = -1;
+    this.smoothActive = false;
+    if (source && this.smoothAllowed && this.smoother && this.smoother.ready && !this.testMode && t0 - this._smPushAt < 400 && this._smoothWanted() && this.frame) {
+      const interval = Math.min(120, Math.max(15, this.srcInterval));
+      const span = Math.max(1, this.lastFrameAt - this.prevFrameAt);
+      alpha = Math.min(1, Math.max(0, (t0 - (interval + 6) - this.prevFrameAt) / span));
+      this.smoothActive = true;
+      seq = `${this.srcSeq}.${Math.round(alpha * 64)}`;
+    }
     const kind = this.testMode ? 'test' : source ? 'src' : 'idle';
-    const seq = this.video && !this.frame ? t0 : this.srcSeq;
-    const key = `${kind}|${kind === 'src' ? seq : 0}|${cam.rotation}|${cam.mirror}|${cam.fit}|${cam.dezoom}|${cam.dezoomBg}|${cam.wide}|${this.cameraOff}|${this.cameraReason}|${this.w}x${this.h}`;
+    const key = `${kind}|${kind === 'src' ? seq : 0}|${cam.rotation}|${cam.mirror}|${cam.fit}|${cam.zoom}|${cam.panX}|${cam.panY}|${cam.dezoomBg}|${cam.wide}|${this.cameraOff}|${this.cameraReason}|${this.w}x${this.h}`;
     if (kind === 'test' || key !== this._lastKey) {
       if (kind === 'test') this._drawTestCard();
-      else if (source) this._drawSource(source);
+      else if (source) this._drawSource(alpha >= 0 ? this.smoother.render(alpha) : source);
       else this._drawPlaceholder();
       this._lastKey = key;
       this._rgbaStale = true;
@@ -338,11 +407,27 @@ class Compositor extends EventTarget {
     this.stats.drawMs = this.stats.drawMs * 0.9 + (t1 - t0) * 0.1;
   }
 
+  /** How many output pixels the picture can be moved horizontally / vertically from the centre (for dragging on the preview). */
+  framing() {
+    const cam = this.getCam();
+    const sw = this.stats.srcW;
+    const sh = this.stats.srcH;
+    if (!sw || !sh) return { roomX: 0, roomY: 0 };
+    const rot = cam.rotation || 0;
+    const swap = rot === 90 || rot === 270;
+    const rw = swap ? sh : sw;
+    const rh = swap ? sw : sh;
+    const contain = cam.fit === 'contain' || !!cam.wide;
+    const base = contain ? Math.min(this.w / rw, this.h / rh) : Math.max(this.w / rw, this.h / rh);
+    const scale = base * Math.min(4, Math.max(0.25, (cam.zoom || 100) / 100));
+    return { roomX: Math.abs(this.w - rw * scale) / 2, roomY: Math.abs(this.h - rh * scale) / 2 };
+  }
+
   _drawSource(source) {
     const { ctx, w: W, h: H } = this;
     const cam = this.getCam();
-    const sw = source.displayWidth || source.videoWidth;
-    const sh = source.displayHeight || source.videoHeight;
+    const sw = source.displayWidth || source.videoWidth || source.width;
+    const sh = source.displayHeight || source.videoHeight || source.height;
     if (!sw || !sh) return;
     this.stats.srcW = sw;
     this.stats.srcH = sh;
@@ -352,9 +437,15 @@ class Compositor extends EventTarget {
     const rw = swap ? sh : sw;
     const rh = swap ? sw : sh;
     const contain = cam.fit === 'contain' || !!cam.wide; // the whole 4:3 frame is shown in "wide" mode
-    const dezoom = Math.min(0.9, Math.max(0, (cam.dezoom || 0) / 100));
     const base = contain ? Math.min(W / rw, H / rh) : Math.max(W / rw, H / rh);
-    const scale = base * (1 - dezoom);
+    // digital zoom: below 100 % the picture shrinks inside the frame, above it is enlarged and cropped
+    const zoom = Math.min(4, Math.max(0.25, (cam.zoom || 100) / 100));
+    const scale = base * zoom;
+    // framing: how far the picture is moved, as a fraction of the room it has (the margin around a shrunk picture,
+    // or the part of an enlarged one that falls outside the frame). Applied in screen space, after rotation / mirror.
+    const clamp1 = (v) => Math.min(1, Math.max(-1, v / 100));
+    const ox = clamp1(cam.panX || 0) * (Math.abs(W - rw * scale) / 2);
+    const oy = clamp1(cam.panY || 0) * (Math.abs(H - rh * scale) / 2);
 
     const transform = (c, s, cx, cy) => {
       c.translate(cx, cy);
@@ -363,12 +454,13 @@ class Compositor extends EventTarget {
       c.scale(s, s);
     };
 
-    if (Math.abs(rw * scale - W) > 1 || Math.abs(rh * scale - H) > 1) {
-      this._drawSurround(source, { sw, sh, rw, rh, scale, transform, mode: cam.dezoomBg || 'blur' });
+    // anything of the frame left uncovered (shrunk, letterboxed, or moved away from an edge) gets a background
+    if (rw * scale - 2 * Math.abs(ox) < W - 1 || rh * scale - 2 * Math.abs(oy) < H - 1) {
+      this._drawSurround(source, { sw, sh, rw, rh, scale, transform, ox, oy, mode: cam.dezoomBg || 'blur' });
     }
 
     ctx.save();
-    transform(ctx, scale, W / 2, H / 2);
+    transform(ctx, scale, W / 2 + ox, H / 2 + oy);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'medium';
     ctx.drawImage(source, -sw / 2, -sh / 2, sw, sh);
@@ -376,7 +468,7 @@ class Compositor extends EventTarget {
   }
 
   /** Fills the frame around a shrunk / letterboxed picture: blurred copy, mirrored copies, or black. */
-  _drawSurround(source, { sw, sh, rw, rh, scale, transform, mode }) {
+  _drawSurround(source, { sw, sh, rw, rh, scale, transform, ox = 0, oy = 0, mode }) {
     const { ctx, w: W, h: H } = this;
     if (mode === 'black') {
       ctx.fillStyle = '#06070d';
@@ -407,7 +499,7 @@ class Compositor extends EventTarget {
       for (let iy = -ny; iy <= ny; iy++) {
         for (let ix = -nx; ix <= nx; ix++) {
           b.save();
-          b.translate(bw / 2 + ix * mw, bh / 2 + iy * mh);
+          b.translate(bw / 2 + ox * k + ix * mw, bh / 2 + oy * k + iy * mh);
           b.scale(Math.abs(ix) % 2 ? -1 : 1, Math.abs(iy) % 2 ? -1 : 1);
           b.drawImage(t, -t.width / 2, -t.height / 2, t.width, t.height);
           b.restore();

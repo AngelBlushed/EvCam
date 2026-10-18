@@ -556,3 +556,14 @@ input[type="range"]:hover::-webkit-slider-thumb { box-shadow: 0 2px 8px rgba(0, 
 #zoomSeg:empty { display: none; }
 #zoomSeg button { white-space: nowrap; }
 #zoomHint, #torchHint { color: var(--faint); }
+
+/* framing on the preview: wheel zooms, a drag moves the picture */
+#preview { cursor: grab; touch-action: none; }
+#preview.panning { cursor: grabbing; }
+
+/* fluidity card */
+.kv { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: 12.5px; color: var(--muted); }
+.kv b { font-weight: 650; color: var(--text); font-variant-numeric: tabular-nums; }
+.kv b.low { color: #ffcf8a; }
+.kv b.ok { color: #7cf0bd; }
+#chipFluid { pointer-events: auto; cursor: pointer; }
