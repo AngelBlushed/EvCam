@@ -125,7 +125,7 @@ async function startServer() {
     version: app.getVersion(),
     getToken: () => settings.get().token,
     getApkPath: apkPath,
-    getPrefs: () => ({ codec: settings.get().power.codec, eco: settings.get().power.eco, camera: settings.get().camera.enabled }),
+    getPrefs: () => ({ codec: settings.get().power.codec, eco: settings.get().power.eco, lowBw: settings.get().power.lowBandwidth, camera: settings.get().camera.enabled }),
     handlers: {
       offer: (payload) => askRenderer('signal:offer', payload),
       bye: () => askRenderer('signal:bye', {}).catch(() => ({}))
@@ -267,6 +267,12 @@ function refreshTray() {
     { type: 'separator' },
     { label: liveState.live ? `● ${liveState.device || 'Téléphone'} connecté` : '○ En attente du téléphone', enabled: false },
     { label: 'Déconnecter le téléphone', enabled: liveState.live, click: () => send('signal:bye', { id: 0 }) },
+    {
+      label: 'Low Internet Issue (débit minimal)',
+      type: 'checkbox',
+      checked: !!settings.get().power.lowBandwidth,
+      click: (item) => updateSettings({ power: { lowBandwidth: item.checked } })
+    },
     {
       label: 'Caméra du téléphone (sinon micro seul)',
       type: 'checkbox',

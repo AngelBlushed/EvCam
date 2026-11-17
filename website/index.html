@@ -206,12 +206,12 @@
         <p>EvCam liste les objectifs que le téléphone expose (ici «&nbsp;4 objectifs détectés&nbsp;») et ajoute un vrai travail sur le champ de vision.</p>
         <ul class="ticks">
           <li><b>Zoom</b> du téléphone quand il est disponible, sinon choisissez un autre objectif</li>
-          <li><b>Dézoom numérique</b> de 0 à 90 %&nbsp;: l’image est réduite dans le cadre et le tour est rempli en <b>flou</b>, en <b>miroir</b> ou en <b>noir</b></li>
+          <li><b>Zoom numérique</b> de 0,25× à 4×&nbsp;: l’image est réduite (tour en <b>flou</b>, <b>miroir</b> ou <b>noir</b>) ou rapprochée&nbsp;; molette et glisser sur l’aperçu pour cadrer</li>
           <li><b>Champ large 4:3</b>&nbsp;: capture tout le capteur, plus de décor en hauteur qu’en 16:9</li>
           <li>Boutons <b>Dézoom maximal</b> et <b>Réinitialiser</b>, liste des <b>objectifs</b></li>
           <li><b>Flash / lumière</b>&nbsp;: la lampe sur la caméra arrière, et sur la caméra avant l’écran du téléphone devient une lumière d’appoint</li>
         </ul>
-        <p class="note"><b>Honnêteté&nbsp;:</b> le dézoom numérique ne montre pas plus de décor que l’objectif n’en voit ; la vraie ultra grand-angle dépend de ce que le téléphone expose.</p>
+        <p class="note"><b>Honnêteté&nbsp;:</b> le dézoom numérique ne montre pas plus de décor que l’objectif n’en voit ; la vraie ultra grand-angle dépend de ce que le téléphone expose. Le zoom du téléphone, quand il existe, reste plus net que le zoom numérique.</p>
       </div>
       <figure class="shot glow reveal d1" style="--w: 360px"><img src="assets/shots/lens.webp" width="547" height="982" loading="lazy" decoding="async" alt="Carte Objectif, dézoom et flash&nbsp;: zoom, dézoom numérique, fond autour de l’image (flou, miroir, noir), champ large 4:3, boutons dézoom maximal et réinitialiser, choix de l’objectif, flash"></figure>
     </article>
@@ -416,6 +416,7 @@
       <details><summary>Discord ne voit pas la caméra EvCam.</summary><p>Discord ne relit sa liste de caméras qu’au démarrage. Dans EvCam, onglet Caméra puis la carte Discord&nbsp;: «&nbsp;Redémarrer Discord&nbsp;», ou «&nbsp;Forcer la détection&nbsp;» dans les réglages. EvCam doit être ouvert (la barre système suffit).</p></details>
       <details><summary>Le téléphone n’arrive pas à se connecter.</summary><p>Vérifiez que le téléphone et le PC sont sur le même Wi-Fi, qu’EvCam est ouvert, et que le pare-feu Windows est autorisé (bouton «&nbsp;Autoriser&nbsp;» dans les réglages). Désactivez aussi l’«&nbsp;isolation des clients&nbsp;» du Wi-Fi invité si votre box en propose une.</p></details>
       <details><summary>L’application «&nbsp;Caméra&nbsp;» de Windows ne montre pas EvCam.</summary><p>L’application Caméra du Microsoft Store ne liste pas les caméras virtuelles de ce type. Utilisez EvCam dans un navigateur, Zoom, Teams, OBS, Discord…</p></details>
+      <details><summary>Mon ping monte quand EvCam tourne (ADSL, Wi-Fi chargé).</summary><p>EvCam n’utilise pas Internet, mais la vidéo occupe votre Wi-Fi et votre box. Activez l’interrupteur <b>Low Internet Issue</b> (onglet Caméra) : le flux tombe à environ 0,5 Mb/s (480p, 15 images/s) et le ping redevient normal. Le micro seul consomme presque rien.</p></details>
       <details><summary>Puis-je n’utiliser que le micro du téléphone&nbsp;?</summary><p>Oui&nbsp;: l’interrupteur «&nbsp;Vidéo du téléphone&nbsp;» éteint la caméra du téléphone (pas de voyant, bien moins de batterie) et seul le micro est envoyé. Réactivez la vidéo quand vous voulez.</p></details>
     </div>
   </section>

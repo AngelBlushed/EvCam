@@ -397,7 +397,8 @@ class Extras {
     let limit = limited ? (fl && fl.limit && fl.limit !== 'none' ? fl.limit : '') : '';
     if (limited && !limit) limit = compositor.stats.outFps && compositor.stats.outFps < target * 0.85 ? 'pc' : 'network';
     // EvCam itself asks the phone for less than the chosen rate (software encoder, VP8, battery saver, heat)
-    const capped = live && !limited && (eff.fps < asked || heat);
+    const lowMode = !!eff.lowBandwidth;
+    const capped = live && !limited && !lowMode && (eff.fps < asked || heat); // ("Low Internet Issue" is a choice, not a problem)
     const capWhy = heat ? 'thermal' : eff.capReason;
     const r = (v) => (v == null ? '—' : `${Math.round(v)} i/s`);
 
@@ -440,6 +441,7 @@ class Extras {
     else if (!rate) sub = 'Mesure en cours…';
     else if (compositor.smoothActive) sub = `Lissage actif : ${Math.round(rate)} → ${compositor.fps} i/s`;
     else if (limited) sub = `Limité par ${name}`;
+    else if (lowMode) sub = `Low Internet Issue : ${eff.fps} i/s pour ménager la connexion`;
     else if (capped) sub = `Plafonné à ${eff.fps} i/s par EvCam`;
     else if (fl && fl.fixed === 'format') sub = `${target} i/s obtenus en exigeant la cadence de la caméra`;
     else if (fl && fl.fixed === 'size') sub = `${target} i/s obtenus en baissant la résolution de la caméra`;
@@ -488,6 +490,7 @@ class Extras {
     $('#chipStandby').classList.toggle('on', standby);
     const heat = engine.live ? engine.phone.thermal || 0 : 0;
     $('#chipHot').classList.toggle('on', heat > 0);
+    $('#chipLow').classList.toggle('on', engine.live && !!store.get('power.lowBandwidth'));
     if (heat > 0) {
       const temp = engine.phone.tempC != null ? ` (${engine.phone.tempC} °C)` : '';
       $('#chipHotText').textContent = heat > 1 ? `Téléphone très chaud${temp} · qualité réduite à 480p` : `Téléphone chaud${temp} · qualité réduite à 720p`;

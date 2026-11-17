@@ -64,6 +64,7 @@
     camWanted: true,             // the camera is wanted (not switched off by the user): brought back after a sleep
     thermal: { level: 0, tempC: null, status: 0 }, // 0 normal, 1 warm (720p30), 2 hot (480p24): set by checkThermal()
     thermalTimer: 0,
+    lowBw: false,                // "Low Internet Issue": the PC asks for the bare minimum of traffic
     force: false,                // "force 60 fps": ask the camera for the rate as a requirement, give frame rate priority over sharpness
     fluid: {                     // what the camera / encoder really deliver compared with what was asked (see checkFluid)
       target: 0, capture: null, encoded: null, limit: 'none', reason: '', w: 0, h: 0,
@@ -616,6 +617,16 @@
       p.degradationPreference = wantsRate() ? 'maintain-framerate' : 'balanced';
       await sender.setParameters(p);
     } catch { /* optional tuning */ }
+    // the microphone too: voice needs far less than the default
+    try {
+      const audio = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+      if (audio) {
+        const ap = audio.getParameters();
+        if (!ap.encodings || !ap.encodings.length) ap.encodings = [{}];
+        ap.encodings[0].maxBitrate = state.lowBw ? 20000 : 64000;
+        await audio.setParameters(ap);
+      }
+    } catch { /* optional tuning */ }
   }
 
   const liveModeNow = () => (state.pc && state.pc.connectionState === 'connected' ? (state.standby ? 'standby' : 'live') : 'reconnect');
@@ -784,6 +795,12 @@
     if (msg.mute !== undefined) setMic(!msg.mute);
     if (msg.standby === true) await setStandby(true, 'user');
     sendState();
+
+    if (msg.lowBw !== undefined && !!msg.lowBw !== state.lowBw) {
+      state.lowBw = !!msg.lowBw;
+      tuneSender();
+      if (!state.reconnecting) reconnect(); // a new offer: the PC caps the video at 700 kb/s (or lifts the cap) in its answer
+    }
 
     if (msg.codec && msg.codec !== state.cfg.codec) {
       state.cfg.codec = msg.codec;
@@ -1249,6 +1266,7 @@
       if (info.authorized && info.prefs) {
         if (info.prefs.codec) state.cfg.codec = info.prefs.codec;
         state.eco = !!info.prefs.eco;
+        state.lowBw = !!info.prefs.lowBw;
         state.camOff = info.prefs.camera === false;
       }
       if (info.authorized) {

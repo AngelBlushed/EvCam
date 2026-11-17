@@ -58,6 +58,7 @@
               <span class="spacer"></span>
               <span class="chip warn" id="chipStall"><i data-ic="alert"></i>Flux en pause : réveillez le téléphone</span>
               <span class="chip warn" id="chipFluid" title="Voir la carte Fluidité"><i data-ic="gauge"></i><span id="chipFluidText">Caméra limitée</span></span>
+              <span class="chip warn" id="chipLow"><i data-ic="wifi"></i>Low Internet Issue · débit minimal</span>
               <span class="chip warn" id="chipHot"><i data-ic="alert"></i><span id="chipHotText">Téléphone chaud · qualité réduite</span></span>
               <span class="chip standby" id="chipStandby"><i data-ic="battery"></i><span id="chipStandbyText">Caméra désactivée · micro seul</span></span>
               <span class="chip use" id="chipUse"><i data-ic="video"></i>Utilisée par une application</span>
@@ -124,6 +125,10 @@
               <div class="field row">
                 <div><label>Vidéo du téléphone</label><small>Désactivez-la pour n’utiliser que le micro : la caméra du téléphone s’éteint (économie de batterie). Réactivez-la quand vous voulez.</small></div>
                 <label class="switch"><input type="checkbox" data-setting="camera.enabled"><span></span></label>
+              </div>
+              <div class="field row">
+                <div><label>Low Internet Issue</label><small>Ligne ADSL ou Wi-Fi chargé, le ping monte quand EvCam tourne ? Cette option bride la connexion au minimum : 480p, 15 images/s, environ 0,5 Mb/s au lieu de 10 (le micro passe à 20 kb/s).</small></div>
+                <label class="switch"><input type="checkbox" data-setting="power.lowBandwidth"><span></span></label>
               </div>
               <div class="field">
                 <label>Qualité</label>

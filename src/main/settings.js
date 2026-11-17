@@ -54,7 +54,8 @@ const DEFAULTS = {
   },
   power: {
     eco: false,           // battery saver: 720p max, 24 fps, lower bitrate, black screen on the phone
-    codec: 'h264'         // 'h264' (phone hardware encoder, efficient) | 'vp8' (compatible)
+    codec: 'h264',        // 'h264' (phone hardware encoder, efficient) | 'vp8' (compatible)
+    lowBandwidth: false   // "Low Internet Issue": squeeze the stream to the bare minimum (480p, 15 fps, about 0.5 Mb/s)
   }
 };
 

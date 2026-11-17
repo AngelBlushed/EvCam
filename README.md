@@ -104,6 +104,10 @@ Quand le téléphone ne tient pas la cadence, EvCam **propose** :
 - Latence, débit, résolution et batterie du téléphone en direct.
 - *Mire de test* (Réglages → Diagnostic) : envoie une image de test à la caméra virtuelle pour vérifier vos applications sans téléphone.
 
+### Ping qui monte pendant la diffusion (« Low Internet Issue »)
+
+EvCam n’utilise pas Internet : l’image passe par votre Wi-Fi, du téléphone au PC. Mais un flux vidéo de plusieurs Mb/s occupe le Wi-Fi et la box, et avec une ligne ADSL le ping des jeux ou des appels peut alors doubler ou plus. L’interrupteur **Low Internet Issue** (*Caméra*, juste sous « Vidéo du téléphone », ou le menu de la barre système) bride la connexion à fond : **480p, 15 images/s, environ 0,5 Mb/s** au lieu de 10, micro à 20 kb/s. Le téléphone renégocie tout seul la connexion et le PC lui impose un plafond de 0,7 Mb/s. Activé, une pastille le rappelle sur l’aperçu. Branchez aussi le PC en Ethernet si possible : en Wi-Fi, le flux traverse la box deux fois.
+
 ## Dépannage
 
 | Problème | Solution |
@@ -120,6 +124,7 @@ Quand le téléphone ne tient pas la cadence, EvCam **propose** :
 | Image saccadée (20 i/s au lieu de 60) | Regardez la carte *Fluidité* : elle dit qui limite (caméra, encodeur, Wi-Fi, PC, chaleur, ou EvCam lui-même) et propose le **lissage** ou **Forcer**. Plus de lumière aide souvent : une caméra dans une pièce sombre pose plus longtemps et ralentit. |
 | Le flash ne s’allume pas | Passez sur la caméra arrière. Certains navigateurs refusent la lampe pendant la capture vidéo : l’appli Android tente l’API native. Sur la caméra avant, la lumière d’appoint est l’écran. |
 | L’image disparaît écran éteint | Normal : Android coupe parfois la caméra écran éteint. Le micro continue ; la caméra revient quand l’écran se rallume. Acceptez l’exemption batterie proposée par l’appli. |
+| Mon ping monte quand EvCam tourne | Activez **Low Internet Issue** (onglet *Caméra*) : le flux tombe à environ 0,5 Mb/s. Le micro seul (vidéo désactivée) ne prend déjà presque rien. |
 | Image de travers | Utilisez *Orientation*, ou tenez le téléphone en mode paysage. |
 
 Journal de diagnostic : `%APPDATA%\EvCam\evcam.log`.

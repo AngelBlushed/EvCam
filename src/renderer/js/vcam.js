@@ -16,6 +16,9 @@ function targetBitrate(quality, fps, factor = 0.08) {
   return Math.round(w * h * fps * factor);
 }
 
+/** "Low Internet Issue": the whole video must stay around half a megabit per second. */
+const LOW_BITRATE = 500000;
+
 /** Quality / frame rate / bitrate really used: the battery saver caps them (720p, 24 fps, lighter bitrate). */
 function effectiveCamera(settings, softEncoder = false) {
   let { quality, fps } = settings.camera;
@@ -36,11 +39,17 @@ function effectiveCamera(settings, softEncoder = false) {
     if (fps > 24) { fps = 24; capReason = 'eco'; }
     factor = 0.05;
   }
+  // "Low Internet Issue" (slow ADSL line, crowded Wi-Fi): as little traffic as possible
+  const lowBandwidth = !!(settings.power && settings.power.lowBandwidth);
+  if (lowBandwidth) {
+    quality = '480p';
+    if (fps > 15) { fps = 15; capReason = 'low'; }
+  }
   const size = QUALITIES[quality] || QUALITIES['720p'];
   // "wide" captures the whole 4:3 sensor (a 16:9 video crops the top and bottom of the scene)
   const wide = !!settings.camera.wide;
   const capture = wide ? { w: Math.round((size.h * 4) / 3 / 4) * 4, h: size.h } : size;
-  return { quality, fps, asked, capReason, size, capture, wide, bitrate: Math.max(1000000, Math.round(capture.w * capture.h * fps * factor)) };
+  return { quality, fps, asked, capReason, size, capture, wide, lowBandwidth, bitrate: lowBandwidth ? LOW_BITRATE : Math.max(1000000, Math.round(capture.w * capture.h * fps * factor)) };
 }
 
 // ---------------------------------------------------------------------------
@@ -584,4 +593,4 @@ class Compositor extends EventTarget {
   }
 }
 
-module.exports = { QUALITIES, targetBitrate, effectiveCamera, VirtualCamera, Compositor };
+module.exports = { QUALITIES, LOW_BITRATE, targetBitrate, effectiveCamera, VirtualCamera, Compositor };

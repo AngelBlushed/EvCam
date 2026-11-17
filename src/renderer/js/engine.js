@@ -31,6 +31,7 @@ function waitIce(pc, ms = 2500) {
  * 12.5 Mb/s is a bit above the most the app ever asks for (1080p / 60, about 10 Mb/s).
  */
 const MAX_VIDEO_KBPS = 12500;
+const LOW_VIDEO_KBPS = 700; // "Low Internet Issue"
 
 function capVideoBitrate(sdp, kbps) {
   const lines = sdp.split('\r\n');
@@ -104,7 +105,7 @@ class Engine extends EventTarget {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     await waitIce(pc);
-    return { type: 'answer', sdp: capVideoBitrate(pc.localDescription.sdp, MAX_VIDEO_KBPS) };
+    return { type: 'answer', sdp: capVideoBitrate(pc.localDescription.sdp, this.getSettings().power.lowBandwidth ? LOW_VIDEO_KBPS : MAX_VIDEO_KBPS) };
   }
 
   _onTrack(session, { track, receiver, streams }) {
@@ -195,6 +196,7 @@ class Engine extends EventTarget {
         facing: s.phone.facing,
         noiseSuppression: s.phone.noiseSuppression,
         eco: !!s.power.eco,
+        lowBw: !!s.power.lowBandwidth,
         force: !!s.camera.force,
         codec: s.power.codec
       });

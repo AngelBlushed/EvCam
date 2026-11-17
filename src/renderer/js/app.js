@@ -51,6 +51,7 @@ async function main() {
   store.onChange((path) => {
     if (path === 'camera.quality' || path === 'camera.fps' || path === 'camera.wide' || path === 'camera.force' || path === 'power.eco') { applyCamera(); engine.pushConfig(); }
     else if (path === 'camera.enabled') engine.pushConfig(true);
+    else if (path === 'power.lowBandwidth') { applyCamera(); engine.pushConfig(true); }
     else if (path === 'camera.smooth') { applyCamera(); applySmooth(); }
     else if (path === 'power.codec') { applyCamera(); engine.pushConfig(); }
     else if (path === 'phone.facing' || path === 'phone.noiseSuppression') engine.pushConfig();
